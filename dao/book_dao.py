@@ -1,3 +1,4 @@
+import sqlite3
 from config.database import DatabaseConnection
 
 class BookDAO:
@@ -20,12 +21,16 @@ class BookDAO:
 
     def add_book(self, title: str, author: str, isbn: str):
         cursor = self.db.cursor()
-        cursor.execute(
-            "INSERT INTO books (title, author, isbn) VALUES (?, ?, ?)",
-            (title, author, isbn)
-        )
-        self.db.commit()
-        return cursor.lastrowid
+        try:
+            cursor.execute(
+                "INSERT INTO books (title, author, isbn) VALUES (?, ?, ?)",
+                (title, author, isbn)
+            )
+            self.db.commit()
+            return cursor.lastrowid
+        except sqlite3.IntegrityError:
+            print(f"[INFO] Book with ISBN '{isbn}' already exists.")
+            return None
 
     def get_all_books(self):
         cursor = self.db.cursor()
