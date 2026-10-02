@@ -79,7 +79,7 @@ class BorrowDAO:
         )
         trans = cursor.fetchone()
         if not trans:
-            return False, "Active transaction not found (it may already have been returned)."
+            return False, "Active transaction not found (it may already have been returned).", None
 
         return_date = datetime.now().date()
         due_date = datetime.strptime(trans["due_date"], "%Y-%m-%d").date()
