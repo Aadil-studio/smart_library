@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#0a0d2b">
+  <title>Executive Overview | Northstar Library</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"><link rel="stylesheet" href="css/style.css">
+  <script defer src="js/common.js"></script><script defer src="js/admin.js"></script>
+</head>
+<body data-dashboard="admin">
+  <div class="app-background" aria-hidden="true"></div><div class="ambient-orb" aria-hidden="true"></div><div class="alert-region" aria-live="polite"></div><div class="mobile-scrim"></div>
+  <div class="dashboard-layout">
+    <aside class="sidebar" aria-label="System administration">
+      <a class="brand" href="index.html"><span class="brand-mark"><i class="fa-solid fa-book-open-reader"></i></span> Northstar</a>
+      <div class="sidebar-user"><span class="avatar" data-user-initials>LA</span><div class="user-meta"><strong data-user-name>Library Admin</strong><small><span data-user-role>System administrator</span></small></div></div>
+      <p class="sidebar-label" style="margin-top:22px">System admin</p>
+      <nav class="side-nav">
+        <a class="side-link active" href="#overview" data-nav-link data-section="Executive Overview"><i class="fa-solid fa-chart-pie"></i> Executive Overview</a>
+        <a class="side-link" href="#catalog" data-nav-link data-section="Catalog Management"><i class="fa-solid fa-book"></i> Catalog Management</a>
+        <a class="side-link" href="#students" data-nav-link data-section="Student Directory"><i class="fa-solid fa-user-graduate"></i> Student Directory</a>
+        <a class="side-link" href="#staff" data-nav-link data-section="Staff Directory"><i class="fa-solid fa-user-tie"></i> Staff / Librarian Directory</a>
+        <a class="side-link" href="#transactions" data-nav-link data-section="Transaction Logs"><i class="fa-solid fa-arrow-right-arrow-left"></i> Transaction Logs</a>
+        <a class="side-link" href="#analytics" data-nav-link data-section="Reports and Analytics"><i class="fa-solid fa-chart-column"></i> Reports &amp; Analytics</a>
+        <a class="side-link" href="#activity" data-nav-link data-section="System Activity Logs"><i class="fa-solid fa-list-check"></i> System Activity Logs</a>
+        <a class="side-link" href="#settings" data-nav-link data-section="System Settings"><i class="fa-solid fa-gear"></i> System Settings</a>
+      </nav>
+      <div class="sidebar-bottom"><nav class="side-nav"><a class="side-link" href="login.html" data-logout><i class="fa-solid fa-arrow-right-from-bracket"></i> Logout</a></nav></div>
+    </aside>
+    <main class="main-shell">
+      <header class="topbar"><div class="topbar-left"><button class="icon-btn menu-toggle" type="button" data-menu-toggle aria-label="Open navigation"><i class="fa-solid fa-bars"></i></button><div class="page-title-wrap"><h1 class="page-title" data-page-heading>Executive Overview</h1><p class="page-subtitle">Clear signals from across the library system.</p></div></div>
+        <div class="topbar-actions"><label class="search-box"><i class="fa-solid fa-magnifying-glass"></i><input type="search" data-catalog-search placeholder="Search inventory" aria-label="Search inventory"></label><span class="live-clock" data-live-clock></span><button class="icon-btn" type="button" data-notifications aria-label="Notifications"><i class="fa-regular fa-bell"></i></button><div class="user-chip"><span class="avatar" data-user-initials>LA</span><span data-user-name>Library Admin</span></div></div>
+      </header>
+      <div class="content" id="overview">
+        <section aria-label="Executive statistics"><div class="section-heading"><div><h2>System at a glance</h2><p>Friday, October 2 · All library services are operational.</p></div><span class="eyebrow"><i class="fa-solid fa-circle" style="font-size:7px;color:var(--green)"></i> System health: stable</span></div>
+          <div class="stats-grid stats-five">
+            <article class="stat-card" style="--stat-color:#a5b4fc;--stat-glow:rgba(99,102,241,.22)"><div class="stat-top"><span>Library inventory</span><span class="stat-icon"><i class="fa-solid fa-book-open"></i></span></div><div class="stat-value" data-total-books>1,248</div><div class="stat-foot">Cataloged titles</div></article>
+            <article class="stat-card" style="--stat-color:#67e8f9;--stat-glow:rgba(6,182,212,.2)"><div class="stat-top"><span>Registered students</span><span class="stat-icon"><i class="fa-solid fa-user-graduate"></i></span></div><div class="stat-value">842</div><div class="stat-foot"><span class="trend"><i class="fa-solid fa-arrow-trend-up"></i> 16</span> this month</div></article>
+            <article class="stat-card" style="--stat-color:#c4b5fd;--stat-glow:rgba(167,139,250,.18)"><div class="stat-top"><span>Active staff</span><span class="stat-icon"><i class="fa-solid fa-user-tie"></i></span></div><div class="stat-value">18</div><div class="stat-foot">Across 3 library desks</div></article>
+            <article class="stat-card" style="--stat-color:#fcd34d;--stat-glow:rgba(245,158,11,.2)"><div class="stat-top"><span>Fines collected</span><span class="stat-icon"><i class="fa-solid fa-coins"></i></span></div><div class="stat-value">$4.8k</div><div class="stat-foot">This academic year</div></article>
+            <article class="stat-card" style="--stat-color:#6ee7b7;--stat-glow:rgba(16,185,129,.18)"><div class="stat-top"><span>System health</span><span class="stat-icon"><i class="fa-solid fa-heart-pulse"></i></span></div><div class="stat-value">99.9%</div><div class="stat-foot">All services operational</div></article>
+          </div>
+        </section>
+        <section id="catalog" aria-labelledby="catalog-heading">
+          <div class="section-heading"><div><h2 id="catalog-heading">Catalog management</h2><p>Full inventory details and collection controls.</p></div><button class="primary-btn" type="button" data-add-book><i class="fa-solid fa-plus"></i> Add book</button></div>
+          <div class="glass-panel table-panel"><div class="table-toolbar"><div><h2>Book inventory</h2><p>Catalog edits stay in memory for this demo.</p></div><div class="toolbar-controls"><select data-status-filter aria-label="Filter by status"><option value="all">All statuses</option><option value="available">Available</option><option value="low">Low stock</option></select><span class="status ok">Inventory live</span></div></div>
+            <div class="table-wrap"><table id="catalog-table"><thead><tr><th>ISBN</th><th>Title / author</th><th>Category</th><th>Publisher</th><th>Total</th><th>Available</th><th>Shelf / rack</th><th>Status</th><th>Actions</th></tr></thead><tbody></tbody></table></div>
+          </div>
+        </section>
+        <div class="dashboard-grid equal" id="analytics" style="margin-top:27px">
+          <section class="glass-panel widget"><div class="widget-heading"><div><h2>Collection distribution</h2><p>Share of catalog by subject area</p></div><i class="fa-solid fa-chart-pie" style="color:var(--cyan)"></i></div>
+            <div class="progress-list">
+              <div class="progress-row"><div class="progress-head"><span>Arts &amp; Humanities</span><span>28% · 349 titles</span></div><div class="progress-track"><span style="width:28%;--bar-a:#6366f1;--bar-b:#06b6d4"></span></div></div>
+              <div class="progress-row"><div class="progress-head"><span>Science &amp; Technology</span><span>24% · 300 titles</span></div><div class="progress-track"><span style="width:24%;--bar-a:#06b6d4;--bar-b:#10b981"></span></div></div>
+              <div class="progress-row"><div class="progress-head"><span>Social Sciences</span><span>19% · 237 titles</span></div><div class="progress-track"><span style="width:19%;--bar-a:#ec4899;--bar-b:#a78bfa"></span></div></div>
+              <div class="progress-row"><div class="progress-head"><span>Business &amp; Economics</span><span>16% · 200 titles</span></div><div class="progress-track"><span style="width:16%;--bar-a:#f59e0b;--bar-b:#ec4899"></span></div></div>
+              <div class="progress-row"><div class="progress-head"><span>Other disciplines</span><span>13% · 162 titles</span></div><div class="progress-track"><span style="width:13%;--bar-a:#a78bfa;--bar-b:#6366f1"></span></div></div>
+            </div>
+          </section>
+          <section class="glass-panel widget"><div class="widget-heading"><div><h2>Circulation this week</h2><p>Issue volume by day</p></div><span class="tag">Oct 2026</span></div>
+            <div class="category-chart" aria-label="Issue volume chart"><div class="chart-column"><div class="chart-bar-wrap"><span class="chart-bar" style="height:54%;--bar-a:#22d3ee;--bar-b:#6366f1"></span></div><span>Mon</span></div><div class="chart-column"><div class="chart-bar-wrap"><span class="chart-bar" style="height:78%;--bar-a:#22d3ee;--bar-b:#6366f1"></span></div><span>Tue</span></div><div class="chart-column"><div class="chart-bar-wrap"><span class="chart-bar" style="height:67%;--bar-a:#22d3ee;--bar-b:#6366f1"></span></div><span>Wed</span></div><div class="chart-column"><div class="chart-bar-wrap"><span class="chart-bar" style="height:91%;--bar-a:#22d3ee;--bar-b:#6366f1"></span></div><span>Thu</span></div><div class="chart-column"><div class="chart-bar-wrap"><span class="chart-bar" style="height:72%;--bar-a:#22d3ee;--bar-b:#6366f1"></span></div><span>Fri</span></div><div class="chart-column"><div class="chart-bar-wrap"><span class="chart-bar" style="height:38%;--bar-a:#22d3ee;--bar-b:#6366f1"></span></div><span>Sat</span></div><div class="chart-column"><div class="chart-bar-wrap"><span class="chart-bar" style="height:24%;--bar-a:#22d3ee;--bar-b:#6366f1"></span></div><span>Sun</span></div></div>
+            <div class="activity-item" style="margin-top:13px"><span class="activity-icon" style="--activity-color:var(--green)"><i class="fa-solid fa-arrow-trend-up"></i></span><div class="activity-copy">Peak circulation: Thursday<small>18% above the weekly average</small></div></div>
+          </section>
+        </div>
+        <section id="activity" style="margin-top:27px"><div class="section-heading"><div><h2>System activity logs</h2><p>Recent administrator and staff actions.</p></div><button class="secondary-btn mini-btn" type="button" data-clear-logs><i class="fa-solid fa-filter-circle-xmark"></i> Clear demo log</button></div>
+          <div class="glass-panel table-panel"><div class="activity-table"><table id="activity-table"><thead><tr><th>Timestamp</th><th>User</th><th>Action</th><th>IP / Details</th></tr></thead><tbody>
+            <tr><td>Oct 02 · 09:41</td><td>Jordan Lee</td><td><span class="status ok">Book returned</span></td><td>Desk 02 · 10.0.14.28</td></tr>
+            <tr><td>Oct 02 · 09:18</td><td>System Admin</td><td><span class="status pending">Catalog updated</span></td><td>Collection sync · 10.0.14.03</td></tr>
+            <tr><td>Oct 02 · 08:56</td><td>Priya Shah</td><td><span class="status warn">Fine collected</span></td><td>Counter A · 10.0.14.31</td></tr>
+          </tbody></table></div></div>
+        </section>
+      </div>
+    </main>
+  </div>
+  <div class="overlay" id="book-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" hidden>
+    <section class="modal modal-wide glass-panel"><div class="modal-header"><div><span class="eyebrow">Collection record</span><h2 id="modal-title">Add a book</h2></div><button class="icon-btn" type="button" data-close-modal aria-label="Close dialog"><i class="fa-solid fa-xmark"></i></button></div>
+      <form class="form-stack" id="book-form" novalidate>
+        <div class="form-grid">
+          <div class="field"><label for="book-isbn">ISBN</label><input id="book-isbn" name="isbn" placeholder="9780000000000" required maxlength="20"></div>
+          <div class="field"><label for="book-title">Title</label><input id="book-title" name="title" placeholder="Book title" required maxlength="120"></div>
+          <div class="field"><label for="book-author">Author</label><input id="book-author" name="author" placeholder="Author name" required maxlength="100"></div>
+          <div class="field"><label for="book-category">Category / genre</label><select id="book-category" name="category" required><option value="" disabled>Select category</option><option>Arts &amp; Humanities</option><option>Science &amp; Technology</option><option>Social Sciences</option><option>Business &amp; Economics</option><option>Fiction</option><option>Reference</option></select></div>
+          <div class="field"><label for="book-publisher">Publisher</label><input id="book-publisher" name="publisher" placeholder="Publisher" required maxlength="100"></div>
+          <div class="field"><label for="book-rack">Shelf / rack number</label><input id="book-rack" name="rack" placeholder="e.g. C-14-02" required maxlength="20"></div>
+          <div class="field"><label for="book-total">Total copies</label><input id="book-total" name="total" type="number" min="0" max="9999" value="1" required></div>
+          <div class="field"><label for="book-available">Available copies</label><input id="book-available" name="available" type="number" min="0" max="9999" value="1" required></div>
+        </div>
+        <div class="modal-readonly" id="book-view" hidden></div>
+        <div class="modal-actions" data-form-actions><button class="secondary-btn" type="button" data-close-modal>Cancel</button><button class="primary-btn" type="submit"><i class="fa-solid fa-check"></i> Save book</button></div>
+      </form>
+    </section>
+  </div>
+</body>
+</html>

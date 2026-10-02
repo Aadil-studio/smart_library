@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#0a0d2b">
+  <title>Operations Hub | Northstar Library</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"><link rel="stylesheet" href="css/style.css">
+  <script defer src="js/common.js"></script><script defer src="js/librarian.js"></script>
+</head>
+<body data-dashboard="librarian">
+  <div class="app-background" aria-hidden="true"></div><div class="ambient-orb" aria-hidden="true"></div><div class="alert-region" aria-live="polite"></div><div class="mobile-scrim"></div>
+  <div class="dashboard-layout">
+    <aside class="sidebar" aria-label="Librarian navigation">
+      <a class="brand" href="index.html"><span class="brand-mark"><i class="fa-solid fa-book-open-reader"></i></span> Northstar</a>
+      <div class="sidebar-user"><span class="avatar" data-user-initials>JL</span><div class="user-meta"><strong data-user-name>Jordan Lee</strong><small data-user-role>Library staff</small></div></div>
+      <p class="sidebar-label" style="margin-top:22px">Operations hub</p>
+      <nav class="side-nav">
+        <a class="side-link active" href="#overview" data-nav-link data-section="Operations Hub"><i class="fa-solid fa-grid-2"></i> Operations Hub</a>
+        <a class="side-link" href="#counter" data-nav-link data-section="Issue / Return Counter"><i class="fa-solid fa-arrow-right-arrow-left"></i> Issue / Return Counter</a>
+        <a class="side-link" href="#inventory" data-nav-link data-section="Book Inventory"><i class="fa-solid fa-book"></i> Book Inventory</a>
+        <a class="side-link" href="#members" data-nav-link data-section="Member Management"><i class="fa-solid fa-users"></i> Member Management</a>
+        <a class="side-link" href="#overdue" data-nav-link data-section="Overdue Tracker"><i class="fa-solid fa-triangle-exclamation"></i> Overdue Tracker</a>
+        <a class="side-link" href="#fines" data-nav-link data-section="Fine Collection"><i class="fa-solid fa-coins"></i> Fine Collection</a>
+        <a class="side-link" href="#reservations" data-nav-link data-section="Notifications"><i class="fa-regular fa-bell"></i> Notifications <span class="notification-badge">3</span></a>
+      </nav>
+      <div class="sidebar-bottom"><nav class="side-nav"><a class="side-link" href="login.html" data-logout><i class="fa-solid fa-arrow-right-from-bracket"></i> Logout</a></nav></div>
+    </aside>
+    <main class="main-shell">
+      <header class="topbar"><div class="topbar-left"><button class="icon-btn menu-toggle" type="button" data-menu-toggle aria-label="Open navigation"><i class="fa-solid fa-bars"></i></button><div class="page-title-wrap"><h1 class="page-title" data-page-heading>Operations Hub</h1><p class="page-subtitle">Keep the collection moving, one reader at a time.</p></div></div>
+        <div class="topbar-actions"><span class="live-clock" data-live-clock></span><button class="icon-btn" type="button" data-notifications aria-label="Notifications"><i class="fa-regular fa-bell"></i></button><div class="user-chip"><span class="avatar" data-user-initials>JL</span><span data-user-name>Jordan Lee</span></div></div>
+      </header>
+      <div class="content" id="overview">
+        <section><div class="section-heading"><div><h2>Today at the library</h2><p>Your desk is in good shape. Here is the circulation pulse.</p></div><span class="eyebrow"><i class="fa-solid fa-circle" style="font-size:7px;color:var(--green)"></i> Desk online</span></div>
+          <div class="stats-grid">
+            <article class="stat-card" style="--stat-color:#a5b4fc"><div class="stat-top"><span>Today's issues</span><span class="stat-icon"><i class="fa-solid fa-arrow-right-to-bracket"></i></span></div><div class="stat-value" data-today-issues>18</div><div class="stat-foot">Across all service desks</div></article>
+            <article class="stat-card" style="--stat-color:#67e8f9;--stat-glow:rgba(6,182,212,.2)"><div class="stat-top"><span>Today's returns</span><span class="stat-icon"><i class="fa-solid fa-arrow-right-from-bracket"></i></span></div><div class="stat-value" data-today-returns>12</div><div class="stat-foot">Items back on the shelf</div></article>
+            <article class="stat-card" style="--stat-color:#fda4af;--stat-glow:rgba(236,72,153,.2)"><div class="stat-top"><span>Overdue books</span><span class="stat-icon"><i class="fa-solid fa-triangle-exclamation"></i></span></div><div class="stat-value">27</div><div class="stat-foot">Across 19 members</div></article>
+            <article class="stat-card" style="--stat-color:#fcd34d;--stat-glow:rgba(245,158,11,.2)"><div class="stat-top"><span>Pending reservations</span><span class="stat-icon"><i class="fa-regular fa-bookmark"></i></span></div><div class="stat-value" data-pending-count>3</div><div class="stat-foot">Ready for a decision</div></article>
+          </div>
+        </section>
+        <div class="dashboard-grid">
+          <section class="glass-panel widget" id="counter"><div class="widget-heading"><div><h2>Quick issue &amp; return</h2><p>Scan a member card and ISBN at the service counter.</p></div><span class="stat-icon"><i class="fa-solid fa-barcode"></i></span></div>
+            <form class="tool-form" id="circulation-form" novalidate>
+              <div class="field"><label for="operation">Transaction</label><select id="operation" name="operation"><option value="issue">Issue a book</option><option value="return">Process a return</option></select></div>
+              <div class="field"><label for="member-id">Student ID</label><input id="member-id" name="memberId" placeholder="STU-2048" required></div>
+              <div class="field span-two"><label for="book-isbn">Book ISBN</label><input id="book-isbn" name="isbn" placeholder="Scan or enter ISBN" required></div>
+              <div class="tool-actions span-two"><button class="primary-btn" type="submit"><i class="fa-solid fa-bolt"></i> Process transaction</button><button class="secondary-btn" type="reset">Clear form</button></div>
+            </form>
+            <div class="notice-strip" style="margin-top:17px"><i class="fa-solid fa-circle-info"></i><p>Demo transactions update today’s counters only. Your database remains unchanged.</p></div>
+          </section>
+          <section class="glass-panel widget" id="inventory"><div class="widget-heading"><div><h2>Desk checklist</h2><p>Priority work for this shift</p></div><i class="fa-solid fa-list-check" style="color:var(--cyan)"></i></div>
+            <div class="activity-list">
+              <div class="activity-item"><span class="activity-icon" style="--activity-color:var(--rose)"><i class="fa-solid fa-triangle-exclamation"></i></span><div class="activity-copy"><strong>Follow up overdue returns</strong><small>27 titles need attention</small></div><a class="text-link" href="#overdue">View</a></div>
+              <div class="activity-item"><span class="activity-icon" style="--activity-color:var(--amber)"><i class="fa-regular fa-bookmark"></i></span><div class="activity-copy"><strong>Review reservations</strong><small>3 requests are waiting</small></div><a class="text-link" href="#reservations">Review</a></div>
+              <div class="activity-item"><span class="activity-icon" style="--activity-color:var(--green)"><i class="fa-solid fa-coins"></i></span><div class="activity-copy"><strong>Fine desk balance</strong><small>$186.50 collected today</small></div><span class="status ok">On track</span></div>
+            </div>
+          </section>
+        </div>
+        <section id="reservations" aria-labelledby="reservations-heading"><div class="section-heading"><div><h2 id="reservations-heading">Pending reservations</h2><p>Approve a hold or let the reader know a title is unavailable.</p></div><span class="status pending">3 awaiting review</span></div>
+          <div class="glass-panel table-panel"><div class="table-wrap"><table id="reservations-table"><thead><tr><th>Student</th><th>Requested book</th><th>Request date</th><th>Availability</th><th>Decision</th></tr></thead><tbody>
+            <tr data-reservation-row><td><div class="identity-line"><span class="person-avatar">SK</span><div><strong>Samira Khan</strong><small>STU-10492</small></div></div></td><td><div class="book-title">The Creative Act</div><div class="book-author">Rick Rubin</div></td><td>Oct 02, 2026</td><td><span class="status ok">Available</span></td><td><div class="table-actions"><button class="primary-btn mini-btn button-success" type="button" data-reservation-action="approve">Approve</button><button class="danger-btn" type="button" data-reservation-action="reject">Reject</button></div></td></tr>
+            <tr data-reservation-row><td><div class="identity-line"><span class="person-avatar" style="background:linear-gradient(145deg,#9b4b82,#4d397d)">MP</span><div><strong>Mateo Park</strong><small>STU-20814</small></div></div></td><td><div class="book-title">Educated</div><div class="book-author">Tara Westover</div></td><td>Oct 01, 2026</td><td><span class="status warn">1 copy returned soon</span></td><td><div class="table-actions"><button class="primary-btn mini-btn button-success" type="button" data-reservation-action="approve">Approve</button><button class="danger-btn" type="button" data-reservation-action="reject">Reject</button></div></td></tr>
+            <tr data-reservation-row><td><div class="identity-line"><span class="person-avatar" style="background:linear-gradient(145deg,#367d8d,#264270)">RL</span><div><strong>Riley Lewis</strong><small>STU-19031</small></div></div></td><td><div class="book-title">Project Hail Mary</div><div class="book-author">Andy Weir</div></td><td>Sep 30, 2026</td><td><span class="status ok">Available</span></td><td><div class="table-actions"><button class="primary-btn mini-btn button-success" type="button" data-reservation-action="approve">Approve</button><button class="danger-btn" type="button" data-reservation-action="reject">Reject</button></div></td></tr>
+          </tbody></table></div></div>
+        </section>
+        <section id="overdue" style="margin-top:27px"><div class="section-heading"><div><h2>Overdue members &amp; fines</h2><p>Resolve open balances at the counter.</p></div><a class="text-link" href="#fines">Collection desk <i class="fa-solid fa-arrow-right"></i></a></div>
+          <div class="glass-panel table-panel" id="fines"><div class="table-wrap"><table id="overdue-table"><thead><tr><th>Member</th><th>Book</th><th>Days overdue</th><th>Balance</th><th>Collection</th></tr></thead><tbody>
+            <tr><td><div class="identity-line"><span class="person-avatar" style="background:linear-gradient(145deg,#7753ad,#373e81)">AN</span><div><strong>Alex Nguyen</strong><small>STU-11405</small></div></div></td><td>The Silent Patient</td><td><span class="status late">8 days</span></td><td class="fine-amount">$12.00</td><td><button class="secondary-btn mini-btn" type="button" data-collect-fine>Collect fine</button></td></tr>
+            <tr><td><div class="identity-line"><span class="person-avatar" style="background:linear-gradient(145deg,#995a45,#56325f)">JT</span><div><strong>Jamie Torres</strong><small>STU-21018</small></div></div></td><td>Circe</td><td><span class="status late">4 days</span></td><td class="fine-amount">$6.00</td><td><button class="secondary-btn mini-btn" type="button" data-collect-fine>Collect fine</button></td></tr>
+          </tbody></table></div></div>
+        </section>
+      </div>
+    </main>
+  </div>
+</body>
+</html>

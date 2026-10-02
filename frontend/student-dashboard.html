@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#0a0d2b">
+  <title>Student Dashboard | Northstar Library</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"><link rel="stylesheet" href="css/style.css">
+  <script defer src="js/common.js"></script><script defer src="js/student.js"></script>
+</head>
+<body data-dashboard="student">
+  <div class="app-background" aria-hidden="true"></div><div class="ambient-orb" aria-hidden="true"></div><div class="alert-region" aria-live="polite"></div><div class="mobile-scrim"></div>
+  <div class="dashboard-layout">
+    <aside class="sidebar" aria-label="Student navigation">
+      <a class="brand" href="index.html"><span class="brand-mark"><i class="fa-solid fa-book-open-reader"></i></span> Northstar</a>
+      <div class="sidebar-user"><span class="avatar" data-user-initials>AM</span><div class="user-meta"><strong data-user-name>Alex Morgan</strong><small data-user-role>Student member</small></div></div>
+      <p class="sidebar-label" style="margin-top:22px">My library</p>
+      <nav class="side-nav">
+        <a class="side-link active" href="#overview" data-nav-link data-section="Dashboard"><i class="fa-solid fa-grid-2"></i> Dashboard</a>
+        <a class="side-link" href="#recommendations" data-nav-link data-section="Browse Catalog"><i class="fa-solid fa-compass"></i> Browse Catalog</a>
+        <a class="side-link" href="#issued-books" data-nav-link data-section="My Borrowed Books"><i class="fa-solid fa-book-bookmark"></i> My Borrowed Books</a>
+        <a class="side-link" href="#reservations" data-nav-link data-section="Reservations"><i class="fa-regular fa-bookmark"></i> Reservations</a>
+        <a class="side-link" href="#history" data-nav-link data-section="Reading History"><i class="fa-solid fa-clock-rotate-left"></i> Reading History</a>
+        <a class="side-link" href="#fines" data-nav-link data-section="Fine Details"><i class="fa-solid fa-receipt"></i> Fine Details</a>
+        <a class="side-link" href="#notifications" data-nav-link data-section="Notifications"><i class="fa-regular fa-bell"></i> Notifications <span class="notification-badge">2</span></a>
+      </nav>
+      <div class="sidebar-bottom"><p class="sidebar-label">Account</p><nav class="side-nav">
+        <a class="side-link" href="#profile" data-nav-link data-section="Profile Settings"><i class="fa-regular fa-user"></i> Profile Settings</a>
+        <a class="side-link" href="login.html" data-logout><i class="fa-solid fa-arrow-right-from-bracket"></i> Logout</a>
+      </nav></div>
+    </aside>
+    <main class="main-shell">
+      <header class="topbar"><div class="topbar-left"><button class="icon-btn menu-toggle" type="button" data-menu-toggle aria-label="Open navigation"><i class="fa-solid fa-bars"></i></button><div class="page-title-wrap"><h1 class="page-title" data-page-heading>Good afternoon, <span class="serif-accent" data-greeting-name>reader</span></h1><p class="page-subtitle">Your campus library, ready when you are.</p></div></div>
+        <div class="topbar-actions"><label class="search-box"><i class="fa-solid fa-magnifying-glass"></i><input type="search" data-student-search placeholder="Search books and loans" aria-label="Search books and loans"></label><span class="live-clock" data-live-clock></span><button class="icon-btn" type="button" data-notifications aria-label="Notifications"><i class="fa-regular fa-bell"></i></button><div class="user-chip"><span class="avatar" data-user-initials>AM</span><span data-user-name>Alex Morgan</span></div></div>
+      </header>
+      <div class="content" id="overview">
+        <section aria-label="Borrowing overview"><div class="section-heading"><div><h2>Your reading overview</h2><p>A small snapshot of everything on your library account.</p></div><span class="eyebrow"><i class="fa-solid fa-sparkles"></i> Fall semester</span></div>
+          <div class="stats-grid stats-five">
+            <article class="stat-card" style="--stat-color:#a5b4fc;--stat-glow:rgba(99,102,241,.22)"><div class="stat-top"><span>Total borrowed</span><span class="stat-icon"><i class="fa-solid fa-book-open"></i></span></div><div class="stat-value">24</div><div class="stat-foot">Books this semester</div></article>
+            <article class="stat-card" style="--stat-color:#67e8f9;--stat-glow:rgba(6,182,212,.2)"><div class="stat-top"><span>Active borrowed</span><span class="stat-icon"><i class="fa-solid fa-book-bookmark"></i></span></div><div class="stat-value">3</div><div class="stat-foot">On your reading list</div></article>
+            <article class="stat-card" style="--stat-color:#fcd34d;--stat-glow:rgba(245,158,11,.2)"><div class="stat-top"><span>Due soon</span><span class="stat-icon"><i class="fa-regular fa-clock"></i></span></div><div class="stat-value">1</div><div class="stat-foot">Within the next 3 days</div></article>
+            <article class="stat-card" style="--stat-color:#fda4af;--stat-glow:rgba(236,72,153,.18)"><div class="stat-top"><span>Overdue books</span><span class="stat-icon"><i class="fa-solid fa-triangle-exclamation"></i></span></div><div class="stat-value">0</div><div class="stat-foot">Everything is on time</div></article>
+            <article class="stat-card" style="--stat-color:#6ee7b7;--stat-glow:rgba(16,185,129,.18)"><div class="stat-top"><span>Unpaid fines</span><span class="stat-icon"><i class="fa-solid fa-receipt"></i></span></div><div class="stat-value">$0</div><div class="stat-foot">No balance due</div></article>
+          </div>
+        </section>
+        <section id="issued-books" aria-labelledby="issued-heading">
+          <div class="section-heading"><div><h2 id="issued-heading">Currently issued books</h2><p>Due dates, fine status, and renewals in one place.</p></div><a class="secondary-btn" href="#recommendations"><i class="fa-solid fa-compass"></i> Browse catalog</a></div>
+          <div class="glass-panel table-panel"><div class="table-toolbar"><div><h2>Active loans</h2><p>3 titles · next due October 8</p></div><span class="status ok">Account in good standing</span></div>
+            <div class="table-wrap"><table id="issued-books"><thead><tr><th>Book title</th><th>Issue date</th><th>Due date</th><th>Fine status</th><th>Renew</th></tr></thead><tbody>
+              <tr><td><div class="book-cell"><span class="book-cover"><i class="fa-solid fa-book-open"></i></span><div><div class="book-title">The Midnight Library</div><div class="book-author">Matt Haig</div></div></div></td><td>Sep 18, 2026</td><td>Oct 08, 2026</td><td><span class="status ok">No fine</span></td><td><button class="secondary-btn mini-btn" type="button" data-renew><i class="fa-solid fa-rotate"></i> Renew</button></td></tr>
+              <tr><td><div class="book-cell"><span class="book-cover" style="--cover-a:#167a79;--cover-b:#163c64"><i class="fa-solid fa-atom"></i></span><div><div class="book-title">A Brief History of Time</div><div class="book-author">Stephen Hawking</div></div></div></td><td>Sep 24, 2026</td><td>Oct 15, 2026</td><td><span class="status ok">No fine</span></td><td><button class="secondary-btn mini-btn" type="button" data-renew><i class="fa-solid fa-rotate"></i> Renew</button></td></tr>
+              <tr><td><div class="book-cell"><span class="book-cover" style="--cover-a:#95556d;--cover-b:#472c62"><i class="fa-solid fa-wand-magic-sparkles"></i></span><div><div class="book-title">The Creative Act</div><div class="book-author">Rick Rubin</div></div></div></td><td>Sep 28, 2026</td><td>Oct 19, 2026</td><td><span class="status ok">No fine</span></td><td><button class="secondary-btn mini-btn" type="button" data-renew><i class="fa-solid fa-rotate"></i> Renew</button></td></tr>
+            </tbody></table></div>
+          </div>
+        </section>
+        <section id="recommendations" aria-labelledby="recommend-heading" style="margin-top:27px">
+          <div class="section-heading"><div><h2 id="recommend-heading">Picked for your next chapter</h2><p>Reader favorites across the library.</p></div><a class="text-link" href="#recommendations">View all titles <i class="fa-solid fa-arrow-right"></i></a></div>
+          <div class="recommend-grid">
+            <article class="recommend-card"><div class="cover-art" style="--cover-a:#1a887b;--cover-b:#113b63"><i class="fa-solid fa-leaf"></i></div><div class="recommend-meta"><span>★ 4.8</span><span class="tag">Psychology</span></div><h3>Atomic Habits</h3><p>James Clear</p><button class="secondary-btn mini-btn" type="button" data-reserve>Reserve a copy</button></article>
+            <article class="recommend-card"><div class="cover-art" style="--cover-a:#aa5549;--cover-b:#562c53"><i class="fa-solid fa-mountain-sun"></i></div><div class="recommend-meta"><span>★ 4.9</span><span class="tag">Memoir</span></div><h3>Educated</h3><p>Tara Westover</p><button class="secondary-btn mini-btn" type="button" data-reserve>Reserve a copy</button></article>
+            <article class="recommend-card"><div class="cover-art" style="--cover-a:#5561b0;--cover-b:#20224f"><i class="fa-solid fa-star"></i></div><div class="recommend-meta"><span>★ 4.7</span><span class="tag">Fiction</span></div><h3>Project Hail Mary</h3><p>Andy Weir</p><button class="secondary-btn mini-btn" type="button" data-reserve>Reserve a copy</button></article>
+          </div>
+        </section>
+        <div class="dashboard-grid equal" style="margin-top:27px">
+          <section class="glass-panel widget" id="notifications"><div class="widget-heading"><div><h2>Recent activity</h2><p>Your latest library moments</p></div><i class="fa-solid fa-wave-square" style="color:var(--cyan)"></i></div>
+            <div class="activity-list" id="history">
+              <div class="activity-item"><span class="activity-icon"><i class="fa-solid fa-arrow-right-to-bracket"></i></span><div class="activity-copy">You borrowed <strong>The Creative Act</strong><small>September 28 · Main library</small></div></div>
+              <div class="activity-item"><span class="activity-icon" style="--activity-color:var(--green)"><i class="fa-solid fa-rotate"></i></span><div class="activity-copy">Renewed <strong>A Brief History of Time</strong><small>September 24 · Online renewal</small></div></div>
+              <div class="activity-item"><span class="activity-icon" style="--activity-color:var(--gold)"><i class="fa-regular fa-bell"></i></span><div class="activity-copy">Your next due date is approaching<small>October 8 · The Midnight Library</small></div></div>
+            </div>
+          </section>
+          <section class="glass-panel widget" id="fines"><div class="widget-heading"><div><h2>Reading reminders</h2><p>Stay a step ahead</p></div><i class="fa-regular fa-calendar-check" style="color:var(--pink)"></i></div>
+            <div class="notice-strip"><i class="fa-solid fa-hourglass-half"></i><p><strong>One book is due soon.</strong><br>Renew by October 8 to keep your reading uninterrupted.</p></div>
+            <div class="activity-item" style="margin-top:9px"><span class="activity-icon" style="--activity-color:var(--green)"><i class="fa-solid fa-circle-check"></i></span><div class="activity-copy">Fine balance is clear<small>Outstanding balance: $0.00</small></div></div>
+            <div id="reservations" class="activity-item"><span class="activity-icon" style="--activity-color:var(--violet)"><i class="fa-regular fa-bookmark"></i></span><div class="activity-copy">No pending reservations<small>Reserve a title from recommendations above.</small></div></div>
+          </section>
+        </div>
+      </div>
+    </main>
+  </div>
+</body>
+</html>
