@@ -1,12 +1,16 @@
 """Shared helpers for the API layer: JSON responses, access decorators, input validation."""
 import re
 from functools import wraps
+from typing import Optional
 
 from flask import current_app, jsonify, request
 
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
+# --------------------------------------------------------------------------- #
+#  JSON response helpers
+# --------------------------------------------------------------------------- #
 def ok(data=None, message=""):
     body = {"success": True, "message": message}
     if data is not None:
@@ -18,6 +22,9 @@ def fail(message, status=400):
     return jsonify({"success": False, "message": message}), status
 
 
+# --------------------------------------------------------------------------- #
+#  Controller / request context
+# --------------------------------------------------------------------------- #
 def get_controller():
     return current_app.extensions["library_controller"]
 
@@ -26,6 +33,9 @@ def current_user():
     return request.environ.get("library_user")
 
 
+# --------------------------------------------------------------------------- #
+#  Access-control decorators
+# --------------------------------------------------------------------------- #
 def login_required(fn):
     @wraps(fn)
     def wrapper(*args, **kwargs):
@@ -60,6 +70,9 @@ def admin_required(fn):
     return wrapper
 
 
+# --------------------------------------------------------------------------- #
+#  Request-body / field helpers
+# --------------------------------------------------------------------------- #
 def json_body():
     data = request.get_json(silent=True)
     return data if isinstance(data, dict) else {}
@@ -78,7 +91,7 @@ def valid_email(email) -> bool:
     return bool(email) and bool(EMAIL_RE.match(str(email)))
 
 
-def password_problem(password) -> str | None:
+def password_problem(password) -> Optional[str]:
     """Returns an error message, or None when the password satisfies the policy."""
     if not password or len(password) < 8:
         return "Password must be at least 8 characters long."
