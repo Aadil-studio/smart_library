@@ -13,6 +13,7 @@ class ReportService:
         cursor = self.db.cursor()
         today = datetime.now().strftime("%Y-%m-%d")
         return {
+            "total_users": cursor.execute("SELECT COUNT(*) FROM users").fetchone()[0],
             "total_books": cursor.execute("SELECT COUNT(*) FROM books").fetchone()[0],
             "available_copies": cursor.execute(
                 "SELECT COALESCE(SUM(available_copies), 0) FROM books").fetchone()[0],
@@ -32,6 +33,10 @@ class ReportService:
                 "SELECT COUNT(*) FROM reservations WHERE status='pending'").fetchone()[0],
             "unpaid_fines": cursor.execute(
                 "SELECT COALESCE(SUM(amount), 0) FROM fines WHERE status='unpaid'").fetchone()[0],
+            "collected_fines": cursor.execute(
+                "SELECT COALESCE(SUM(amount), 0) FROM fines WHERE status='paid'").fetchone()[0],
+            "waived_fines": cursor.execute(
+                "SELECT COALESCE(SUM(amount), 0) FROM fines WHERE status='waived'").fetchone()[0],
             "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         }
 

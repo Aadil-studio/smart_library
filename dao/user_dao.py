@@ -68,14 +68,16 @@ class UserDAO:
         self.log_activity(user_id, name, "REGISTRATION", f"Registered as {role}")
         return True, "User registered successfully."
 
-    def authenticate(self, credential, password):
+    def get_user_by_credential(self, credential):
         cursor = self.db.cursor()
-        cursor.execute(
-            "SELECT * FROM users WHERE (email=? OR user_id=?) AND status='active'",
-            (credential, credential),
-        )
-        user = cursor.fetchone()
+        cursor.execute("SELECT * FROM users WHERE email=? OR user_id=?", (credential, credential))
+        return cursor.fetchone()
+
+    def authenticate(self, credential, password):
+        user = self.get_user_by_credential(str(credential).strip())
         if not user:
+            return None
+        if user["status"] != "active":
             return None
         if not self._verify_password(user["password"], password):
             return None
@@ -83,6 +85,19 @@ class UserDAO:
             self._upgrade_legacy_hash(user["user_id"], password)
         self.log_activity(user["user_id"], user["name"], "LOGIN", "User logged in successfully")
         return self._public_user(user)
+
+    def authenticate_with_reason(self, credential, password):
+        user = self.get_user_by_credential(str(credential).strip())
+        if not user:
+            return None, "Account not found."
+        if user["status"] != "active":
+            return None, "Your account has been disabled. Please contact the library administrator."
+        if not self._verify_password(user["password"], password):
+            return None, "Incorrect password."
+        if user["password"].startswith(("pbkdf2:", "scrypt:")) is False:
+            self._upgrade_legacy_hash(user["user_id"], password)
+        self.log_activity(user["user_id"], user["name"], "LOGIN", "User logged in successfully")
+        return self._public_user(user), None
 
     def email_exists(self, email) -> bool:
         cursor = self.db.cursor()
@@ -241,3 +256,43 @@ class UserDAO:
         else:
             row = cursor.execute("SELECT COUNT(*) FROM users WHERE role=?", (role,)).fetchone()
         return row[0]
+
+    def get_all_users(self, role=None, search=None, status=None):
+        """All accounts regardless of role — administrator user management."""
+        cursor = self.db.cursor()
+        clauses, params = [], []
+        if role:
+            clauses.append("role=?")
+            params.append(role)
+        if search:
+            like = f"%{search}%"
+            clauses.append("(name LIKE ? OR email LIKE ? OR user_id LIKE ?)")
+            params += [like, like, like]
+        if status:
+            clauses.append("status=?")
+            params.append(status)
+        query = "SELECT * FROM users"
+        if clauses:
+            query += " WHERE " + " AND ".join(clauses)
+        query += " ORDER BY created_at DESC, id DESC"
+        cursor.execute(query, params)
+        return [self._public_user(row) for row in cursor.fetchall()]
+
+    def set_user_role(self, user_id, role):
+        cursor = self.db.cursor()
+        cursor.execute("UPDATE users SET role=? WHERE user_id=?", (role, user_id))
+        self.db.commit()
+        return cursor.rowcount > 0
+
+    def user_growth(self, months=6):
+        """Registrations per month for the administrator growth chart."""
+        cursor = self.db.cursor()
+        cursor.execute(
+            """SELECT strftime('%Y-%m', created_at) AS month, COUNT(*) AS total
+               FROM users
+               WHERE created_at >= DATE('now', ?)
+               GROUP BY month ORDER BY month ASC""",
+            (f"-{int(months)} months",),
+        )
+        return [dict(row) for row in cursor.fetchall()]
+

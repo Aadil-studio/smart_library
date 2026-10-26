@@ -1,0 +1,320 @@
+[INFO] Database Connection Established with WAL Mode (Singleton Instance)
+Smart Library running at http://127.0.0.1:5000
+ * Serving Flask app 'app'
+ * Debug mode: on
+WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on http://127.0.0.1:5000
+Press CTRL+C to quit
+ * Restarting with stat
+ * Debugger is active!
+ * Debugger PIN: 138-955-389
+127.0.0.1 - - [05/Oct/2026 12:49:18] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:49:18] "GET /admin/users.html HTTP/1.1" 302 -
+127.0.0.1 - - [05/Oct/2026 12:49:19] "GET /admin/librarian-dashboard.html HTTP/1.1" 302 -
+127.0.0.1 - - [05/Oct/2026 12:49:19] "GET /student/fines.html HTTP/1.1" 302 -
+127.0.0.1 - - [05/Oct/2026 12:49:19] "GET /admin/system-settings.html HTTP/1.1" 302 -
+127.0.0.1 - - [05/Oct/2026 12:49:19] "GET /admin/activity-logs.html HTTP/1.1" 302 -
+127.0.0.1 - - [05/Oct/2026 12:49:19] "GET /api/settings HTTP/1.1" 401 -
+127.0.0.1 - - [05/Oct/2026 12:49:48] "HEAD /admin/users.html HTTP/1.1" 302 -
+127.0.0.1 - - [05/Oct/2026 12:50:09] "POST /api/auth/login HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:50:09] "POST /api/borrow HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:50:10] "GET /api/borrow?scope=all&status=active HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:50:10] "GET /api/borrow?scope=all&status=active HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:50:10] "POST /api/borrow/3/return HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:50:11] "GET /api/fines HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:50:48] "GET /login.html HTTP/1.1" 302 -
+127.0.0.1 - - [05/Oct/2026 12:50:48] "GET /admin/dashboard.html HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:50:48] "GET /css/style.css HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:50:48] "GET /js/api.js HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:50:48] "GET /js/common.js HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:50:48] "GET /js/admin.js HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:50:48] "GET /js/borrow.js HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:50:48] "GET /api/auth/me HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:50:48] "GET /api/notifications/unread-count HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:50:48] "GET /api/dashboard HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:51:03] "GET /favicon.ico HTTP/1.1" 302 -
+127.0.0.1 - - [05/Oct/2026 12:51:03] "GET / HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:51:35] "GET /admin/fines.html HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:51:35] "GET /css/style.css HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:51:35] "GET /js/api.js HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:51:35] "GET /js/common.js HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:51:35] "GET /js/borrow.js HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:51:35] "GET /js/admin.js HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:51:35] "GET /api/auth/me HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:51:35] "GET /api/notifications/unread-count HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:51:35] "GET /api/fines HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:51:37] "POST /api/fines/1/collect HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:51:37] "GET /api/fines HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:51:57] "GET /admin/users.html HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:51:57] "GET /css/style.css HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:51:58] "GET /js/api.js HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:51:58] "GET /js/common.js HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:51:58] "GET /js/borrow.js HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:51:58] "GET /js/admin.js HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:51:58] "GET /api/auth/me HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:51:58] "GET /api/notifications/unread-count HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:51:58] "GET /api/users HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:51:59] "GET /admin/activity-logs.html HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:51:59] "GET /css/style.css HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:51:59] "GET /js/common.js HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:51:59] "GET /js/api.js HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:51:59] "GET /js/borrow.js HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:51:59] "GET /js/admin.js HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:51:59] "GET /api/auth/me HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:51:59] "GET /api/notifications/unread-count HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:51:59] "GET /api/activity-logs?limit=300 HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:52:01] "GET /admin/system-settings.html HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:52:01] "GET /css/style.css HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:52:01] "GET /js/api.js HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:52:01] "GET /js/common.js HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:52:01] "GET /js/borrow.js HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:52:01] "GET /js/admin.js HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:52:01] "GET /api/auth/me HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:52:01] "GET /api/notifications/unread-count HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:52:01] "GET /api/settings HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:52:23] "POST /api/auth/login HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:52:23] "GET /admin/librarian-dashboard.html HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:52:23] "GET /css/style.css HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:52:24] "GET /js/api.js HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:52:24] "GET /js/common.js HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:52:24] "GET /js/borrow.js HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:52:24] "GET /js/admin.js HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:52:24] "GET /api/auth/me HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:52:24] "GET /api/notifications/unread-count HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:52:24] "GET /api/dashboard HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:52:47] "GET /admin/fines.html HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:52:47] "GET /css/style.css HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:52:47] "GET /js/common.js HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:52:47] "GET /js/api.js HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:52:47] "GET /js/borrow.js HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:52:47] "GET /js/admin.js HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:52:47] "GET /api/auth/me HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:52:47] "GET /api/notifications/unread-count HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:52:48] "GET /api/fines HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:52:49] "GET /admin/users.html HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:52:49] "GET /css/style.css HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:52:49] "GET /js/common.js HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:52:49] "GET /js/api.js HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:52:49] "GET /js/borrow.js HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:52:49] "GET /js/admin.js HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:52:49] "GET /api/auth/me HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:52:49] "GET /api/notifications/unread-count HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:52:49] "GET /api/users HTTP/1.1" 403 -
+127.0.0.1 - - [05/Oct/2026 12:52:50] "GET /api/users HTTP/1.1" 403 -
+127.0.0.1 - - [05/Oct/2026 12:53:02] "GET /favicon.ico HTTP/1.1" 302 -
+127.0.0.1 - - [05/Oct/2026 12:53:04] "GET / HTTP/1.1" 304 -
+ * Detected change in 'C:\\Users\\Admin\\Desktop\\smart_library\\app.py', reloading
+[INFO] Database Connection Established with WAL Mode (Singleton Instance)
+Smart Library running at http://127.0.0.1:5000
+ * Restarting with stat
+ * Debugger is active!
+ * Debugger PIN: 138-955-389
+127.0.0.1 - - [05/Oct/2026 12:55:14] "GET /admin/users.html HTTP/1.1" 302 -
+127.0.0.1 - - [05/Oct/2026 12:55:14] "GET /admin/dashboard.html HTTP/1.1" 302 -
+127.0.0.1 - - [05/Oct/2026 12:55:14] "GET /admin/librarian-dashboard.html HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:55:14] "GET /css/style.css HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:55:15] "GET /js/common.js HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:55:15] "GET /js/api.js HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:55:15] "GET /js/borrow.js HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:55:15] "GET /js/admin.js HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:55:15] "GET /api/auth/me HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:55:15] "GET /api/notifications/unread-count HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:55:15] "GET /api/dashboard HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:55:32] "POST /api/auth/login HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:55:32] "GET /student/fines.html HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:55:33] "GET /css/style.css HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:55:33] "GET /js/api.js HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:55:33] "GET /js/borrow.js HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:55:33] "GET /js/common.js HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:55:33] "GET /js/student.js HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:55:33] "GET /api/auth/me HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:55:33] "GET /api/notifications/unread-count HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:55:33] "GET /api/borrow/fines HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:55:34] "GET /student/books.html HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:55:34] "GET /css/style.css HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:55:35] "GET /js/common.js HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:55:35] "GET /js/api.js HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:55:35] "GET /js/books.js HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:55:35] "GET /js/student.js HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:55:35] "GET /api/auth/me HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:55:35] "GET /api/notifications/unread-count HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:55:35] "GET /api/books?sort=newest HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:55:36] "GET /api/auth/me HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:55:36] "POST /api/borrow HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:55:36] "GET /api/books?sort=newest HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:55:42] "GET /favicon.ico HTTP/1.1" 302 -
+127.0.0.1 - - [05/Oct/2026 12:55:42] "GET / HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:56:07] "GET /student/dashboard.html HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:56:07] "GET /css/style.css HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:56:07] "GET /js/api.js HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:56:07] "GET /js/common.js HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:56:07] "GET /js/borrow.js HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:56:07] "GET /js/student.js HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:56:07] "GET /api/auth/me HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:56:07] "GET /api/notifications/unread-count HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:56:07] "GET /api/dashboard HTTP/1.1" 200 -
+ * Detected change in 'C:\\Users\\Admin\\Desktop\\smart_library\\routes\\user_routes.py', reloading
+[INFO] Database Connection Established with WAL Mode (Singleton Instance)
+Smart Library running at http://127.0.0.1:5000
+ * Restarting with stat
+ * Debugger is active!
+ * Debugger PIN: 138-955-389
+127.0.0.1 - - [05/Oct/2026 12:56:13] "POST /api/auth/logout HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:56:13] "GET /student/dashboard.html HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:56:13] "GET /login.html HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:56:13] "GET /css/style.css HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:56:14] "GET /js/common.js HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:56:14] "GET /js/auth.js HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:56:31] "GET /favicon.ico HTTP/1.1" 302 -
+127.0.0.1 - - [05/Oct/2026 12:56:31] "GET / HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:56:37] "GET /api/auth/me HTTP/1.1" 401 -
+127.0.0.1 - - [05/Oct/2026 12:56:43] "GET /favicon.ico HTTP/1.1" 302 -
+127.0.0.1 - - [05/Oct/2026 12:56:43] "GET / HTTP/1.1" 304 -
+ * Detected change in 'C:\\Users\\Admin\\Desktop\\smart_library\\tests\\test_api.py', reloading
+[INFO] Database Connection Established with WAL Mode (Singleton Instance)
+Smart Library running at http://127.0.0.1:5000
+ * Restarting with stat
+ * Debugger is active!
+ * Debugger PIN: 138-955-389
+127.0.0.1 - - [05/Oct/2026 12:56:54] "GET /student/dashboard.html HTTP/1.1" 302 -
+127.0.0.1 - - [05/Oct/2026 12:56:54] "GET /login.html HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:56:54] "GET /css/style.css HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:56:54] "GET /js/common.js HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:56:54] "GET /js/auth.js HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:56:56] "POST /api/auth/login HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:56:56] "GET /admin/dashboard.html HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:56:56] "GET /css/style.css HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:56:57] "GET /js/api.js HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:56:57] "GET /js/common.js HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:56:57] "GET /js/admin.js HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:56:57] "GET /js/borrow.js HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 12:56:57] "GET /api/auth/me HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:56:57] "GET /api/notifications/unread-count HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:56:57] "GET /api/dashboard HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 12:57:21] "GET /favicon.ico HTTP/1.1" 302 -
+127.0.0.1 - - [05/Oct/2026 12:57:21] "GET / HTTP/1.1" 304 -
+ * Detected change in 'C:\\Users\\Admin\\Desktop\\smart_library\\app.py', reloading
+[INFO] Database Connection Established with WAL Mode (Singleton Instance)
+Smart Library running at http://127.0.0.1:5000
+ * Restarting with stat
+ * Debugger is active!
+ * Debugger PIN: 138-955-389
+ * Detected change in 'C:\\Users\\Admin\\Desktop\\smart_library\\app.py', reloading
+[INFO] Database Connection Established with WAL Mode (Singleton Instance)
+Smart Library running at http://127.0.0.1:5000
+ * Restarting with stat
+ * Debugger is active!
+ * Debugger PIN: 138-955-389
+ * Detected change in 'C:\\Users\\Admin\\Desktop\\smart_library\\tests\\test_api.py', reloading
+[INFO] Database Connection Established with WAL Mode (Singleton Instance)
+Smart Library running at http://127.0.0.1:5000
+ * Restarting with stat
+ * Debugger is active!
+ * Debugger PIN: 138-955-389
+ * Detected change in 'C:\\Users\\Admin\\Desktop\\smart_library\\tests\\test_api.py', reloading
+[INFO] Database Connection Established with WAL Mode (Singleton Instance)
+Smart Library running at http://127.0.0.1:5000
+ * Restarting with stat
+ * Debugger is active!
+ * Debugger PIN: 138-955-389
+ * Detected change in 'C:\\Users\\Admin\\Desktop\\smart_library\\tests\\test_api.py', reloading
+[INFO] Database Connection Established with WAL Mode (Singleton Instance)
+Smart Library running at http://127.0.0.1:5000
+ * Restarting with stat
+ * Debugger is active!
+ * Debugger PIN: 138-955-389
+ * Detected change in 'C:\\Users\\Admin\\Desktop\\smart_library\\tests\\test_api.py', reloading
+[INFO] Database Connection Established with WAL Mode (Singleton Instance)
+Smart Library running at http://127.0.0.1:5000
+ * Restarting with stat
+ * Debugger is active!
+ * Debugger PIN: 138-955-389
+ * Detected change in 'C:\\Users\\Admin\\Desktop\\smart_library\\tests\\test_api.py', reloading
+[INFO] Database Connection Established with WAL Mode (Singleton Instance)
+Smart Library running at http://127.0.0.1:5000
+ * Restarting with stat
+ * Debugger is active!
+ * Debugger PIN: 138-955-389
+ * Detected change in 'C:\\Users\\Admin\\Desktop\\smart_library\\tests\\test_api.py', reloading
+[INFO] Database Connection Established with WAL Mode (Singleton Instance)
+Smart Library running at http://127.0.0.1:5000
+ * Restarting with stat
+ * Debugger is active!
+ * Debugger PIN: 138-955-389
+ * Detected change in 'C:\\Users\\Admin\\Desktop\\smart_library\\tests\\test_api.py', reloading
+[INFO] Database Connection Established with WAL Mode (Singleton Instance)
+Smart Library running at http://127.0.0.1:5000
+ * Restarting with stat
+ * Debugger is active!
+ * Debugger PIN: 138-955-389
+127.0.0.1 - - [05/Oct/2026 13:14:13] "GET / HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 13:14:14] "GET /js/api.js HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 13:14:14] "GET /css/style.css HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 13:14:14] "GET /js/common.js HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 13:14:14] "GET /api/auth/me HTTP/1.1" 401 -
+127.0.0.1 - - [05/Oct/2026 13:14:14] "GET /login.html HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 13:14:14] "GET /css/style.css HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 13:14:14] "GET /js/common.js HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 13:14:14] "GET /js/auth.js HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 13:14:14] "GET /css/style.css HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 13:14:28] "GET / HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 13:14:28] "GET /css/style.css HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 13:14:28] "GET /js/api.js HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 13:14:28] "GET /js/common.js HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 13:14:28] "GET /api/auth/me HTTP/1.1" 401 -
+127.0.0.1 - - [05/Oct/2026 13:14:28] "GET /login.html HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 13:14:28] "GET /css/style.css HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 13:14:28] "GET /js/common.js HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 13:14:28] "GET /js/auth.js HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 13:14:29] "GET /favicon.ico HTTP/1.1" 302 -
+127.0.0.1 - - [05/Oct/2026 13:14:29] "GET / HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 13:14:53] "POST /api/auth/login HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 13:14:54] "GET /student/dashboard.html HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 13:14:54] "GET /css/style.css HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 13:14:54] "GET /js/common.js HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 13:14:54] "GET /js/api.js HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 13:14:55] "GET /js/borrow.js HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 13:14:55] "GET /js/student.js HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 13:14:55] "GET /api/auth/me HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 13:14:55] "GET /favicon.ico HTTP/1.1" 302 -
+127.0.0.1 - - [05/Oct/2026 13:14:55] "GET /api/notifications/unread-count HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 13:14:55] "GET /api/dashboard HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 13:14:55] "GET / HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 13:15:13] "GET /student/books.html HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 13:15:14] "GET /css/style.css HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 13:15:14] "GET /js/books.js HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 13:15:15] "GET /js/common.js HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 13:15:15] "GET /js/api.js HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 13:15:15] "GET /js/student.js HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 13:15:15] "GET /api/auth/me HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 13:15:15] "GET /favicon.ico HTTP/1.1" 302 -
+127.0.0.1 - - [05/Oct/2026 13:15:15] "GET /api/notifications/unread-count HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 13:15:15] "GET /api/books?sort=newest HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 13:15:15] "GET / HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 13:15:23] "POST /api/reservations HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 13:15:25] "POST /api/reservations HTTP/1.1" 409 -
+127.0.0.1 - - [05/Oct/2026 13:15:31] "GET /api/auth/me HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 13:15:32] "POST /api/borrow HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 13:15:32] "GET /api/books?sort=newest HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 13:15:37] "GET /student/notifications.html HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 13:15:37] "GET /css/style.css HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 13:15:37] "GET /js/api.js HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 13:15:37] "GET /js/common.js HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 13:15:37] "GET /js/student.js HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 13:15:37] "GET /js/notifications.js HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 13:15:37] "GET /api/auth/me HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 13:15:37] "GET /favicon.ico HTTP/1.1" 302 -
+127.0.0.1 - - [05/Oct/2026 13:15:37] "GET /api/notifications/unread-count HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 13:15:37] "GET /api/notifications HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 13:15:37] "GET / HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 13:15:37] "GET /api/notifications/unread-count HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 13:15:43] "POST /api/auth/logout HTTP/1.1" 200 -
+127.0.0.1 - - [05/Oct/2026 13:15:43] "GET /login.html HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 13:15:43] "GET /css/style.css HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 13:15:43] "GET /js/common.js HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 13:15:43] "GET /js/auth.js HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 13:15:44] "GET /favicon.ico HTTP/1.1" 302 -
+127.0.0.1 - - [05/Oct/2026 13:15:44] "GET / HTTP/1.1" 304 -
+127.0.0.1 - - [05/Oct/2026 13:16:56] "POST /api/auth/login HTTP/1.1" 401 -
+127.0.0.1 - - [05/Oct/2026 13:17:01] "POST /api/auth/login HTTP/1.1" 401 -
+127.0.0.1 - - [05/Oct/2026 13:17:18] "POST /api/auth/login HTTP/1.1" 401 -

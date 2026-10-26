@@ -35,9 +35,9 @@ def main():
 
     # Admin is created automatically by the app if missing — but ensure one exists here too
     if not controller.user_dao.get_users_by_role("admin"):
-        controller.register("ADMIN001", "System Administrator", "admin@smartlibrary.local",
-                            "Admin@123", role="admin", department="IT")
-        print("  admin    admin@smartlibrary.local  / Admin@123")
+        controller.register("ADMIN001", "System Administrator", "admin@library.com",
+                            "admin123", role="admin", department="IT")
+        print("  admin    admin@library.com  / admin123")
 
     for user_id, name, email, password, dept, semester, phone in DEMO_STUDENTS:
         ok, msg = controller.register(user_id, name, email, password, role="student",

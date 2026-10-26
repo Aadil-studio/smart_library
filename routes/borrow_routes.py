@@ -7,18 +7,42 @@ borrow_bp = Blueprint("borrow", __name__, url_prefix="/api/borrow")
 
 
 @borrow_bp.post("")
-@staff_required
+@login_required
 def issue_book():
     controller = get_controller()
+    user = current_user()
     data = json_body()
     error = require_fields(data, "student_id", "book_id")
     if error:
         return fail(error)
-    days, error = parse_int(data.get("days", 14), "days", minimum=1, maximum=90)
-    if error:
-        return fail(error)
+    if "days" in data:
+        days, error = parse_int(data["days"], "days", minimum=1, maximum=90)
+        if error:
+            return fail(error)
+    else:
+        days = controller.get_library_settings().get("loan_period_days", "14")
+        try:
+            days = max(1, min(90, int(days)))
+        except (TypeError, ValueError):
+            days = 14
 
-    result = controller.borrow_dao.issue_book(str(data["student_id"]).strip(), int(data["book_id"]), days)
+    student_id = str(data["student_id"]).strip()
+    # Students may borrow for themselves only; staff may issue to any member.
+    if user["role"] not in ("admin", "librarian"):
+        if student_id.lower() != user["user_id"].lower():
+            return fail("You can only borrow books for your own account.", 403)
+
+    # Accept a numeric book ID or an ISBN string
+    book_ref = str(data["book_id"]).strip()
+    try:
+        book_id = int(book_ref)
+    except ValueError:
+        book = controller.book_dao.get_book_by_isbn(book_ref)
+        if not book:
+            return fail(f"No book found with ISBN '{book_ref}'.", 404)
+        book_id = book["id"]
+
+    result = controller.borrow_dao.issue_book(student_id, book_id, days)
     success, message = result[0], result[1]
     if not success:
         return fail(message, 409)
@@ -26,9 +50,16 @@ def issue_book():
 
 
 @borrow_bp.post("/<int:transaction_id>/return")
-@staff_required
+@login_required
 def return_book(transaction_id):
-    success, message, _fine = get_controller().return_book(transaction_id)
+    controller = get_controller()
+    user = current_user()
+    transaction = controller.borrow_dao.get_transaction_by_id(transaction_id)
+    if not transaction:
+        return fail("Active transaction not found (it may already have been returned).", 409)
+    if user["role"] not in ("admin", "librarian") and transaction["student_id"] != user["user_id"]:
+        return fail("You can only return books borrowed on your own account.", 403)
+    success, message, _fine = controller.return_book(transaction_id, user["role"])
     if not success:
         return fail(message, 409)
     return ok(message=message)

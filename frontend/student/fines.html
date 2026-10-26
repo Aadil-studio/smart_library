@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="theme-color" content="#0b1020">
+    <title>My fines | Northstar Library</title>
+    <link rel="stylesheet" href="../css/northstar.css">
+  </head>
+  <body data-base="../">
+    <div id="toast"></div>
+    <div class="app">
+      <aside>
+        <div class="logo">Northstar <b>Library</b></div>
+        <a class="nav" href="dashboard.html">Dashboard</a>
+        <a class="nav" href="dashboard.html">Browse and loans</a>
+        <a class="nav on" href="fines.html">My fines</a>
+        <div style="flex:1"></div>
+        <button class="nav" id="signout">Sign out</button>
+      </aside>
+      <main>
+        <div class="top"><h2>My fines</h2><div class="who"><span id="uname"></span><div class="av" id="uav"></div></div></div>
+        <div id="content" class="panel">Loading your fines…</div>
+      </main>
+    </div>
+    <script>
+      const content = document.getElementById("content");
+      const esc = (value) =>
+        String(value ?? "").replace(/[&<>"']/g, (char) => ({
+          "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+        })[char]);
+      const toast = (message) => {
+        const target = document.getElementById("toast");
+        target.textContent = message;
+        target.style.display = "block";
+      };
+      async function request(path, options = {}) {
+        const response = await fetch(path, {
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          ...options,
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || !result.success) {
+          const error = new Error(result.message || `Request failed (${response.status}).`);
+          error.status = response.status;
+          throw error;
+        }
+        return result;
+      }
+      async function load() {
+        try {
+          const current = await request("/api/auth/me");
+          if (current.data.user.role !== "student") {
+            location.replace("../admin/dashboard.html");
+            return;
+          }
+          document.getElementById("uname").textContent = current.data.user.name;
+          document.getElementById("uav").textContent = current.data.user.name.charAt(0).toUpperCase();
+          const result = await request("/api/borrow/fines");
+          const fines = result.data.fines;
+          content.innerHTML = `<h3>Outstanding balance</h3><p class="stat"><strong>Rs. ${Number(result.data.unpaid_total).toFixed(2)}</strong></p>${fines.length ? `<table><tr><th>Book</th><th>Amount</th><th>Status</th></tr>${fines.map((fine) => `<tr><td>${esc(fine.book_title)}</td><td>Rs. ${Number(fine.amount).toFixed(2)}</td><td><span class="tag">${esc(fine.status)}</span></td></tr>`).join("")}</table>` : "<p>No fines recorded. You are all caught up.</p>"}`;
+        } catch (error) {
+          if (error.status === 401) {
+            location.replace("../login.html");
+            return;
+          }
+          toast(error.message);
+          content.textContent = error.message;
+        }
+      }
+      document.getElementById("signout").onclick = async () => {
+        try {
+          await request("/api/auth/logout", { method: "POST" });
+          location.href = "../login.html";
+        } catch (error) {
+          toast(error.message);
+        }
+      };
+      load();
+    </script>
+  </body>
+</html>

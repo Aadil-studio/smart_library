@@ -40,14 +40,23 @@ def register():
     )
     if not success:
         return fail(message, 409)
-    user = controller.login(email, data["password"])
-    controller.notification_dao.notify(
-        user["user_id"], "Welcome to Smart Library",
-        f"Hi {user['name']}, your account was created successfully. Explore the catalog and reserve books!",
-        ntype="account",
-    )
-    session["user"] = user
-    return ok(data={"user": user}, message="Registration successful. Welcome aboard!")
+
+    user = controller.get_user(student_id)
+    if user:
+        controller.notification_dao.notify(
+            user["user_id"], "Welcome to Smart Library",
+            f"Hi {user['name']}, your account was created successfully. Explore the catalog and reserve books!",
+            ntype="account",
+        )
+        # Library staff keep an eye on new members
+        for staff in controller.list_all_users(role="librarian") + controller.list_all_users(role="admin"):
+            controller.notification_dao.notify(
+                staff["user_id"], "New member registered",
+                f"{user['name']} ({user['user_id']}) joined the library.",
+                ntype="account",
+            )
+
+    return ok(data={"user": user}, message="Account created successfully. Please login.")
 
 
 @auth_bp.post("/login")
@@ -59,12 +68,17 @@ def login():
         return fail("Please enter your login credentials.")
 
     credential = str(data["credential"]).strip()
-    user = controller.login(credential, data["password"])
+    user, reason = controller.user_dao.authenticate_with_reason(credential, data["password"])
     if not user:
-        return fail("Invalid credentials or inactive account.", 401)
+        if reason == "Account not found.":
+            return fail(reason, 404)
+        if reason == "Your account has been disabled. Please contact the library administrator.":
+            return fail(reason, 403)
+        if reason == "Incorrect password.":
+            return fail(reason, 401)
+        return fail("Invalid email or password.", 401)
 
     session["user"] = user
-    # Remember me keeps the session cookie across browser restarts (lifetime set in create_app)
     session.permanent = bool(data.get("remember"))
     return ok(data={"user": user}, message=f"Welcome back, {user['name']}!")
 

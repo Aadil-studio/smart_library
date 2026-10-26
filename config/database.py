@@ -116,12 +116,58 @@ class DatabaseConnection:
             student_id TEXT NOT NULL,
             transaction_id INTEGER NOT NULL,
             amount REAL NOT NULL,
-            status TEXT CHECK(status IN ('unpaid', 'paid')) DEFAULT 'unpaid',
+            status TEXT CHECK(status IN ('unpaid', 'paid', 'waived')) DEFAULT 'unpaid',
             payment_date DATE,
+            collected_by TEXT,
+            waived_by TEXT,
+            waive_reason TEXT,
+            waived_at TIMESTAMP,
             FOREIGN KEY (student_id) REFERENCES users(user_id),
             FOREIGN KEY (transaction_id) REFERENCES transactions(id)
         );
         """)
+
+        # Migrate a pre-existing fines table that lacks the payment/waiver columns
+        # and the 'waived' status (SQLite CHECK constraints cannot be altered in place).
+        existing_fines = [row[1] for row in cursor.execute("PRAGMA table_info(fines)").fetchall()]
+        if "collected_by" not in existing_fines:
+            cursor.execute("""
+            CREATE TABLE fines_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                student_id TEXT NOT NULL,
+                transaction_id INTEGER NOT NULL,
+                amount REAL NOT NULL,
+                status TEXT CHECK(status IN ('unpaid', 'paid', 'waived')) DEFAULT 'unpaid',
+                payment_date DATE,
+                collected_by TEXT,
+                waived_by TEXT,
+                waive_reason TEXT,
+                waived_at TIMESTAMP,
+                FOREIGN KEY (student_id) REFERENCES users(user_id),
+                FOREIGN KEY (transaction_id) REFERENCES transactions(id)
+            );
+            """)
+            cursor.execute("""
+                INSERT INTO fines_new (id, student_id, transaction_id, amount, status, payment_date)
+                SELECT id, student_id, transaction_id, amount, status, payment_date FROM fines
+            """)
+            cursor.execute("DROP TABLE fines")
+            cursor.execute("ALTER TABLE fines_new RENAME TO fines")
+
+        # Library Settings (key/value, edited by the administrator)
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        );
+        """)
+        for key, value in (
+            ("library_name", "Smart Library"),
+            ("loan_period_days", "14"),
+            ("fine_per_day", "10"),
+            ("due_soon_days", "3"),
+        ):
+            cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", (key, value))
 
         # Notifications Table
         cursor.execute("""
@@ -179,6 +225,7 @@ class DatabaseConnection:
         self._add_column_if_missing(cursor, "notifications", "title", "TEXT DEFAULT ''")
         self._add_column_if_missing(cursor, "notifications", "type", "TEXT")
         self._add_column_if_missing(cursor, "notifications", "ref_id", "INTEGER")
+        self._add_column_if_missing(cursor, "fines", "collected_by", "TEXT")
         # Backfill created_at for pre-existing book rows
         cursor.execute("UPDATE books SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL")
 

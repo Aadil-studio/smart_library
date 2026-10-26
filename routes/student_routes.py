@@ -1,12 +1,12 @@
 from flask import Blueprint, request
 
-from routes import (admin_required, current_user, fail, get_controller, login_required, ok)
+from routes import (current_user, fail, get_controller, login_required, ok, staff_required)
 
 student_bp = Blueprint("students", __name__, url_prefix="/api/students")
 
 
 @student_bp.get("")
-@admin_required
+@staff_required
 def list_students():
     controller = get_controller()
     students = controller.user_dao.get_users_by_role(
@@ -14,11 +14,16 @@ def list_students():
         search=request.args.get("q", "").strip() or None,
         status=request.args.get("status", "").strip() or None,
     )
+    # Enrich with per-member circulation stats for the member management table
+    for student in students:
+        loans = controller.borrow_dao.get_student_borrowed_books(student["user_id"], active_only=True)
+        student["borrowed_count"] = len(loans)
+        student["unpaid_fine"] = controller.borrow_dao.sum_unpaid_fines(student["user_id"])
     return ok(data={"students": students})
 
 
 @student_bp.get("/<user_id>")
-@admin_required
+@staff_required
 def get_student(user_id):
     controller = get_controller()
     student = controller.get_user(user_id)
@@ -34,7 +39,7 @@ def get_student(user_id):
 
 
 @student_bp.put("/<user_id>/status")
-@admin_required
+@staff_required
 def set_status(user_id):
     controller = get_controller()
     student = controller.get_user(user_id)

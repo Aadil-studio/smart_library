@@ -1,4 +1,9 @@
 __pycache__/
 *.pyc
-library.db
 .pytest_cache/
+.venv/
+.env
+library.db
+library.db-shm
+library.db-wal
+report.html

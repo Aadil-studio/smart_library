@@ -10,11 +10,15 @@ book_bp = Blueprint("books", __name__, url_prefix="/api/books")
 @login_required
 def list_books():
     controller = get_controller()
+    sort = request.args.get("sort", "").strip() or None
+    if sort and sort not in ("newest", "oldest", "title", "title-desc", "author", "year", "availability"):
+        return fail("Invalid sort option.")
     books = controller.filter_books(
         search=request.args.get("q", "").strip() or None,
         category=request.args.get("category", "").strip() or None,
         author=request.args.get("author", "").strip() or None,
         availability=request.args.get("availability", "").strip() or None,
+        sort=sort,
     )
     return ok(data={"books": books, "categories": controller.get_categories(),
                     "authors": controller.get_authors()})

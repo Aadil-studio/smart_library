@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="theme-color" content="#0b1020">
+    <title>Members | Northstar Library</title>
+    <link rel="stylesheet" href="../css/northstar.css">
+  </head>
+  <body data-base="../">
+    <div id="toast"></div>
+    <div class="app">
+      <aside>
+        <div class="logo">Northstar <b>Library</b></div>
+        <a class="nav" href="dashboard.html">Dashboard</a>
+        <a class="nav on" href="users.html">Members</a>
+        <div style="flex:1"></div>
+        <button class="nav" id="signout">Sign out</button>
+      </aside>
+      <main>
+        <div class="top"><h2>Members</h2><div class="who"><span id="uname"></span><div class="av" id="uav"></div></div></div>
+        <div class="panel">
+          <div class="bar"><input id="search" placeholder="Search members" aria-label="Search members"></div>
+          <div id="content">Loading members…</div>
+        </div>
+      </main>
+    </div>
+    <script>
+      const content = document.getElementById("content");
+      const esc = (value) =>
+        String(value ?? "").replace(/[&<>"']/g, (char) => ({
+          "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+        })[char]);
+      const notify = (message) => {
+        const target = document.getElementById("toast");
+        target.textContent = message;
+        target.style.display = "block";
+      };
+      async function request(path, options = {}) {
+        const response = await fetch(path, {
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          ...options,
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || !result.success) {
+          const error = new Error(result.message || `Request failed (${response.status}).`);
+          error.status = response.status;
+          throw error;
+        }
+        return result;
+      }
+      let members = [];
+      function draw() {
+        const term = document.getElementById("search").value.toLowerCase();
+        const rows = members.filter((user) =>
+          `${user.user_id} ${user.name} ${user.email}`.toLowerCase().includes(term),
+        );
+        content.innerHTML = rows.length
+          ? `<table><tr><th>ID</th><th>Name</th><th>Email</th><th>Status</th></tr>${rows.map((user) => `<tr><td>${esc(user.user_id)}</td><td>${esc(user.name)}</td><td>${esc(user.email)}</td><td><span class="tag">${esc(user.status)}</span></td></tr>`).join("")}</table>`
+          : "<p>No members match your search.</p>";
+      }
+      async function load() {
+        try {
+          const current = await request("/api/auth/me");
+          if (current.data.user.role !== "admin") {
+            location.replace("../admin/dashboard.html");
+            return;
+          }
+          document.getElementById("uname").textContent = current.data.user.name;
+          document.getElementById("uav").textContent = current.data.user.name.charAt(0).toUpperCase();
+          members = (await request("/api/users?role=student")).data.users;
+          draw();
+        } catch (error) {
+          if (error.status === 401) {
+            location.replace("../login.html");
+            return;
+          }
+          notify(error.message);
+          content.textContent = error.message;
+        }
+      }
+      document.getElementById("search").oninput = draw;
+      document.getElementById("signout").onclick = async () => {
+        try {
+          await request("/api/auth/logout", { method: "POST" });
+          location.href = "../login.html";
+        } catch (error) {
+          notify(error.message);
+        }
+      };
+      load();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="theme-color" content="#0b1020">
+    <title>System settings | Northstar Library</title>
+    <link rel="stylesheet" href="../css/northstar.css">
+  </head>
+  <body data-base="../">
+    <div id="toast"></div>
+    <div class="app">
+      <aside>
+        <div class="logo">Northstar <b>Library</b></div>
+        <a class="nav" href="dashboard.html">Dashboard</a>
+        <a class="nav" href="users.html">Members</a>
+        <a class="nav on" href="system-settings.html">System settings</a>
+        <div style="flex:1"></div>
+        <button class="nav" id="signout">Sign out</button>
+      </aside>
+      <main>
+        <div class="top"><h2>System settings</h2><div class="who"><span id="uname"></span><div class="av" id="uav"></div></div></div>
+        <div class="panel">
+          <h3>Library defaults</h3>
+          <form id="settings" class="row2">
+            <label>Library name<input id="library_name" required></label>
+            <label>Loan period (days)<input id="loan_period_days" type="number" min="1" max="90" required></label>
+            <label>Fine per day (Rs.)<input id="fine_per_day" type="number" min="0" max="1000" required></label>
+            <label>Due-soon reminder (days)<input id="due_soon_days" type="number" min="0" max="365" required></label>
+            <button class="btn">Save settings</button>
+          </form>
+        </div>
+      </main>
+    </div>
+    <script>
+      const form = document.getElementById("settings");
+      const toast = (message) => {
+        const target = document.getElementById("toast");
+        target.textContent = message;
+        target.style.display = "block";
+      };
+      async function request(path, options = {}) {
+        const response = await fetch(path, {
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          ...options,
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || !result.success) {
+          const error = new Error(result.message || `Request failed (${response.status}).`);
+          error.status = response.status;
+          throw error;
+        }
+        return result;
+      }
+      async function load() {
+        try {
+          const current = await request("/api/auth/me");
+          if (current.data.user.role !== "admin") {
+            location.replace("../admin/dashboard.html");
+            return;
+          }
+          document.getElementById("uname").textContent = current.data.user.name;
+          document.getElementById("uav").textContent = current.data.user.name.charAt(0).toUpperCase();
+          const settings = (await request("/api/settings")).data;
+          for (const [key, value] of Object.entries(settings)) {
+            if (document.getElementById(key)) document.getElementById(key).value = value;
+          }
+        } catch (error) {
+          if (error.status === 401) {
+            location.replace("../login.html");
+            return;
+          }
+          toast(error.message);
+        }
+      }
+      form.onsubmit = async (event) => {
+        event.preventDefault();
+        try {
+          await request("/api/settings", {
+            method: "PUT",
+            body: JSON.stringify({
+              library_name: document.getElementById("library_name").value,
+              loan_period_days: Number(document.getElementById("loan_period_days").value),
+              fine_per_day: Number(document.getElementById("fine_per_day").value),
+              due_soon_days: Number(document.getElementById("due_soon_days").value),
+            }),
+          });
+          toast("Settings saved.");
+        } catch (error) {
+          toast(error.message);
+        }
+      };
+      document.getElementById("signout").onclick = async () => {
+        try {
+          await request("/api/auth/logout", { method: "POST" });
+          location.href = "../login.html";
+        } catch (error) {
+          toast(error.message);
+        }
+      };
+      load();
+    </script>
+  </body>
+</html>

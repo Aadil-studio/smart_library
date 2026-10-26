@@ -1,132 +1,56 @@
-
 <!DOCTYPE html>
 <html>
 <head>
-    <meta charset="utf-8">
-    <title>Smart Library Management System - Final Report</title>
-    <style>
-        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 40px; }
-        h1 { color: #1a365d; text-align: center; border-bottom: 2px solid #2b6cb0; padding-bottom: 10px; }
-        h2 { color: #2b6cb0; margin-top: 30px; border-bottom: 1px solid #e2e8f0; padding-bottom: 5px; }
-        h3 { color: #2d3748; }
-        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-        th, td { border: 1px solid #cbd5e0; padding: 10px; text-align: left; }
-        th { background-color: #ebf8ff; color: #2c5282; }
-        tr:nth-child(even) { background-color: #f7fafc; }
-        .highlight { background-color: #e6fffa; border-left: 4px solid #319795; padding: 10px; margin: 15px 0; }
-        .diagram-box { background: #f8fafc; border: 1px solid #cbd5e0; padding: 15px; border-radius: 8px; font-family: monospace; }
-        .page-break { page-break-after: always; }
-    </style>
+<meta charset="utf-8">
+<title>Smart Library — Library Report</title>
+<style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #1c2433; margin: 40px; }
+    h1 { color: #1a365d; text-align: center; border-bottom: 2px solid #2b6cb0; padding-bottom: 10px; }
+    h2 { color: #2b6cb0; margin-top: 30px; border-bottom: 1px solid #e2e8f0; padding-bottom: 5px; }
+    table { width: 100%; border-collapse: collapse; margin: 14px 0; }
+    th, td { border: 1px solid #cbd5e0; padding: 8px 10px; text-align: left; }
+    th { background-color: #ebf8ff; color: #2c5282; }
+    tr:nth-child(even) { background-color: #f7fafc; }
+    .cards { display: flex; flex-wrap: wrap; gap: 12px; margin: 18px 0; }
+    .card { flex: 1 1 150px; border: 1px solid #cbd5e0; border-radius: 10px; padding: 14px; background: #f8fafc; }
+    .card b { display: block; font-size: 24px; color: #2b6cb0; }
+    .meta { color: #64748b; text-align: center; }
+    .page-break { page-break-after: always; }
+    @media print { .no-print { display: none; } }
+</style>
 </head>
 <body>
+    <h1>Smart Library Management System — Library Report</h1>
+    <p class="meta">Generated on 2026-10-05 12:59:17 &middot; Data source: library.db (live)</p>
 
-    <h1>SMART LIBRARY MANAGEMENT SYSTEM</h1>
-    <p style="text-align: center;"><b>Course:</b> Software Construction & Development (SCD) | <b>Instructor:</b> Dr. Kamran Taj Pathan</p>
-    <p style="text-align: center;"><b>Backend:</b> Python 3.x | <b>Database:</b> SQLite3 | <b>Testing:</b> PyTest</p>
+    <h2>1. Summary</h2>
+    <div class="cards"><div class="card"><b>10</b>Total books</div><div class="card"><b>22</b>Available copies</div><div class="card"><b>3</b>Total students</div><div class="card"><b>2</b>Currently borrowed</div><div class="card"><b>0</b>Overdue</div><div class="card"><b>1</b>Pending reservations</div><div class="card"><b>0</b>Unpaid fines (Rs.)</div></div>
 
-    <hr>
-
-    <h2>1. Project Initiation & Planning</h2>
-    <p><b>Project Title:</b> Smart Library Management System using Python and Layered Architecture</p>
-    <p><b>Status:</b> New Development | <b>Duration:</b> 3 Months</p>
-    <p><b>Aim & Motivation:</b> Manual library processes mein paperwork aur dynamic fine calculation mein late delays hote hain. Yeh system 3-Tier Layered Architecture aur Design Patterns (Singleton DB & Strategy Fine Engine) se processes ko automate karta hai.</p>
-
-    <h2>2. Team Roles Allocation (3 Members)</h2>
-    <table>
-        <tr>
-            <th>Member</th>
-            <th>Assigned Development Roles</th>
-            <th>Core Responsibilities</th>
-        </tr>
-        <tr>
-            <td><b>Member 1</b></td>
-            <td>System Analyst, Database Designer, Software Developer</td>
-            <td>Database Schema, SQLite Queries (`dao/book_dao.py`), Entity Models (`models/models.py`).</td>
-        </tr>
-        <tr>
-            <td><b>Member 2 (Lead)</b></td>
-            <td>Project Manager, Software Architect, SQA Lead</td>
-            <td>3-Tier Architecture Setup, Singleton Connection, Strategy Pattern (`services/fine_strategy.py`), PyTest Suite (`tests/`).</td>
-        </tr>
-        <tr>
-            <td><b>Member 3</b></td>
-            <td>Software Designer, UI Designer, Content Writer</td>
-            <td>Controllers (`controllers/app_controller.py`), Frontend HTML/CSS Templates, Project Documentation.</td>
-        </tr>
-    </table>
+    <h2>2. Catalog (10 titles)</h2>
+    <table><thead><tr><th>ID</th><th>ISBN</th><th>Title</th><th>Author</th><th>Category</th><th>Total</th><th>Available</th><th>Shelf</th></tr></thead><tbody><tr><td>10</td><td>978-1118290279</td><td>Data Structures and Algorithms in Python</td><td>Goodrich & Tamassia</td><td>Computer Science</td><td>2</td><td>1</td><td>C3</td></tr><tr><td>9</td><td>978-0201633610</td><td>Design Patterns</td><td>Erich Gamma</td><td>Software Engineering</td><td>1</td><td>1</td><td>C2</td></tr><tr><td>8</td><td>978-1593279288</td><td>The Pragmatic Bookshelf: Python Crash Course</td><td>Eric Matthes</td><td>Programming</td><td>3</td><td>3</td><td>C1</td></tr><tr><td>7</td><td>978-1119800361</td><td>Operating System Concepts</td><td>Abraham Silberschatz</td><td>Operating Systems</td><td>2</td><td>2</td><td>B3</td></tr><tr><td>6</td><td>978-0134610993</td><td>Artificial Intelligence: A Modern Approach</td><td>Stuart Russell</td><td>Artificial Intelligence</td><td>2</td><td>2</td><td>B2</td></tr><tr><td>5</td><td>978-0136629226</td><td>Computer Networking: A Top-Down Approach</td><td>James F. Kurose</td><td>Networking</td><td>2</td><td>2</td><td>B1</td></tr><tr><td>4</td><td>978-0078022159</td><td>Database System Concepts</td><td>Abraham Silberschatz</td><td>Computer Science</td><td>2</td><td>2</td><td>A2</td></tr><tr><td>3</td><td>978-0262046305</td><td>Introduction to Algorithms</td><td>Thomas H. Cormen</td><td>Computer Science</td><td>3</td><td>3</td><td>A2</td></tr><tr><td>2</td><td>978-0135957059</td><td>The Pragmatic Programmer</td><td>Andrew Hunt</td><td>Software Engineering</td><td>3</td><td>3</td><td>A1</td></tr><tr><td>1</td><td>978-0132350884</td><td>Clean Code</td><td>Robert C. Martin</td><td>Software Engineering</td><td>4</td><td>3</td><td>A1</td></tr></tbody></table>
 
     <div class="page-break"></div>
 
-    <h2>3. Architectural & Design Diagrams</h2>
-    
-    <h3>3.1 Package Diagram (3-Tier Layered Architecture)</h3>
-    <div class="diagram-box">
-        [ Presentation Layer (HTML / Templates / UI) ]<br>
-        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;│<br>
-        [ Controllers Layer (App / Request Handling) ]<br>
-        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;│<br>
-        [ Business Logic / Services Layer (Strategy Fine Engine) ]<br>
-        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;│<br>
-        [ Data Access Object Layer (Book & User DAO) ]<br>
-        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;│<br>
-        [ Database Layer (Singleton SQLite Connection) ]
-    </div>
+    <h2>3. Borrowing Records (latest 4 of 4)</h2>
+    <table><thead><tr><th>Txn</th><th>Student</th><th>Book</th><th>Issued</th><th>Due</th><th>Returned</th><th>Status</th><th>Fine</th></tr></thead><tbody><tr><td>4</td><td>Alex Morgan</td><td>Data Structures and Algorithms in Python</td><td>2026-10-05</td><td>2026-10-19</td><td>—</td><td>issued</td><td>Rs. 0.0</td></tr><tr><td>3</td><td>Alex Morgan</td><td>The Pragmatic Programmer</td><td>2026-10-05</td><td>2026-09-30</td><td>2026-10-05</td><td>returned</td><td>Rs. 50.0</td></tr><tr><td>2</td><td>Alex Morgan</td><td>Introduction to Algorithms</td><td>2026-10-05</td><td>2026-10-12</td><td>2026-10-05</td><td>returned</td><td>Rs. 0.0</td></tr><tr><td>1</td><td>Alex Morgan</td><td>Clean Code</td><td>2026-10-05</td><td>2026-10-19</td><td>—</td><td>issued</td><td>Rs. 0.0</td></tr></tbody></table>
 
-    <h3>3.2 Class Diagram & Design Patterns</h3>
-    <div class="diagram-box">
-        +-------------------------+         +----------------------------+<br>
-        |  DatabaseConnection     |         |      FineStrategy (ABC)    |<br>
-        +-------------------------+         +----------------------------+<br>
-        | - _instance             |                       ▲<br>
-        | + get_connection()      |          ┌────────────┴────────────┐<br>
-        +-------------------------+          │                         │<br>
-                                     +---------------+         +---------------+<br>
-                                     | StudentStrategy|        | FacultyStrategy|<br>
-                                     +---------------+         +---------------+<br>
-                                     | calculate()   |         | calculate()   |<br>
-                                     +---------------+         +---------------+<br>
-    </div>
+    <h2>4. Overdue Books (0)</h2>
+    <table><thead><tr><th>Txn</th><th>Student</th><th>Book</th><th>Due date</th><th>Overdue</th><th>Fine so far</th></tr></thead><tbody><tr><td colspan="6" style="text-align:center;color:#64748b">No records found</td></tr></tbody></table>
 
-    <h2>4. SQA & Testing Execution Report</h2>
-    <div class="highlight">
-        <b>PyTest Execution Status: 100% PASSED</b><br>
-        All 6 automated unit tests passed in 0.12s. Singleton DB instances and Fine calculation strategies verified.
-    </div>
+    <h2>5. Most Borrowed Books</h2>
+    <table><thead><tr><th>Title</th><th>Author</th><th>Times borrowed</th></tr></thead><tbody><tr><td>Clean Code</td><td>Robert C. Martin</td><td>1</td></tr><tr><td>The Pragmatic Programmer</td><td>Andrew Hunt</td><td>1</td></tr><tr><td>Introduction to Algorithms</td><td>Thomas H. Cormen</td><td>1</td></tr><tr><td>Data Structures and Algorithms in Python</td><td>Goodrich & Tamassia</td><td>1</td></tr></tbody></table>
 
-    <table>
-        <tr>
-            <th>Test Case ID</th>
-            <th>Scenario</th>
-            <th>User Role</th>
-            <th>Overdue Days</th>
-            <th>Expected Output</th>
-            <th>Status</th>
-        </tr>
-        <tr>
-            <td>TC-01</td>
-            <td>Student Overdue Fine</td>
-            <td>Student</td>
-            <td>3 Days</td>
-            <td>Rs. 30.0</td>
-            <td><b>PASSED</b></td>
-        </tr>
-        <tr>
-            <td>TC-02</td>
-            <td>Faculty Overdue Fine</td>
-            <td>Faculty</td>
-            <td>5 Days</td>
-            <td>Rs. 10.0</td>
-            <td><b>PASSED</b></td>
-        </tr>
-        <tr>
-            <td>TC-03</td>
-            <td>On-Time Return</td>
-            <td>Student</td>
-            <td>0 Days</td>
-            <td>Rs. 0.0</td>
-            <td><b>PASSED</b></td>
-        </tr>
-    </table>
+    <h2>6. Fine Report (1)</h2>
+    <table><thead><tr><th>Fine</th><th>Member</th><th>Book</th><th>Overdue</th><th>Amount</th><th>Status</th><th>Paid / Waived</th></tr></thead><tbody><tr><td>1</td><td>Alex Morgan</td><td>The Pragmatic Programmer</td><td>5 days</td><td>Rs. 50.00</td><td>paid</td><td>2026-10-05</td></tr></tbody></table>
 
+    <h2>7. Reservations (1)</h2>
+    <table><thead><tr><th>ID</th><th>Student</th><th>Book</th><th>Requested</th><th>Status</th></tr></thead><tbody><tr><td>1</td><td>Alex Morgan</td><td>Data Structures and Algorithms in Python</td><td>2026-10-05 06:25:51</td><td>pending</td></tr></tbody></table>
+
+    <h2>8. Registered Students (3)</h2>
+    <table><thead><tr><th>Student ID</th><th>Name</th><th>Email</th><th>Department</th><th>Semester</th><th>Status</th></tr></thead><tbody><tr><td>STU-1002</td><td>Sara Khan</td><td>sara.khan@smartlibrary.local</td><td>Software Engineering</td><td>4</td><td>active</td></tr><tr><td>STU-1001</td><td>Alex Morgan</td><td>student@smartlibrary.local</td><td>Computer Science</td><td>6</td><td>active</td></tr><tr><td>2K24/SWEE/01</td><td>adil</td><td>aadilali@gmail.com</td><td>Engineering</td><td>6</td><td>active</td></tr></tbody></table>
+
+    <p class="no-print" style="text-align:center;color:#64748b;margin-top:30px">
+        Print this page (Ctrl+P) and choose "Save as PDF" to export a PDF copy.
+    </p>
 </body>
 </html>

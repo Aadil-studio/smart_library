@@ -1,7 +1,7 @@
 from flask import Blueprint, request
 
 from routes import (current_user, fail, get_controller, json_body, login_required,
-                    ok, require_fields, staff_required)
+                    ok, parse_int, require_fields, staff_required)
 
 reservation_bp = Blueprint("reservations", __name__, url_prefix="/api/reservations")
 
@@ -35,10 +35,15 @@ def create_reservation():
     error = require_fields(data, "book_id")
     if error:
         return fail(error)
-    book = controller.get_book(int(data["book_id"]))
+
+    book_id, error = parse_int(data.get("book_id"), "book_id", minimum=1)
+    if error:
+        return fail(error)
+
+    book = controller.get_book(book_id)
     if not book:
         return fail("Book not found.", 404)
-    success, message = controller.reserve_book(user["user_id"], int(data["book_id"]))
+    success, message = controller.reserve_book(user["user_id"], book_id)
     if not success:
         return fail(message, 409)
     return ok(message=message)

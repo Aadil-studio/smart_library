@@ -71,7 +71,7 @@ class BorrowDAO:
         return True, f"Book issued successfully. Due date: {due_date}", transaction_id
 
     # --- Return ---
-    def return_book(self, transaction_id: int, user_role="student"):
+    def return_book(self, transaction_id: int, user_role="student", fine_rate=None):
         cursor = self.db.cursor()
         cursor.execute(
             "SELECT * FROM transactions WHERE id=? AND status IN ('issued', 'overdue')",
@@ -85,7 +85,9 @@ class BorrowDAO:
         due_date = datetime.strptime(trans["due_date"], "%Y-%m-%d").date()
         overdue_days = max(0, (return_date - due_date).days)
 
-        strategy = FacultyFineStrategy() if user_role.lower() == "faculty" else StudentFineStrategy()
+        strategy = FacultyFineStrategy() if user_role.lower() == "faculty" else StudentFineStrategy(
+            rate_per_day=10.0 if fine_rate is None else fine_rate
+        )
         calculated_fine = FineContext(strategy).compute_fine(overdue_days)
 
         cursor.execute(
@@ -177,12 +179,104 @@ class BorrowDAO:
     def get_student_fines(self, student_id: str):
         cursor = self.db.cursor()
         cursor.execute(
-            """SELECT f.*, b.title AS book_title
+            """SELECT f.*, b.title AS book_title, t.due_date, t.return_date
                FROM fines f
                JOIN transactions t ON f.transaction_id = t.id
                JOIN books b ON t.book_id = b.id
                WHERE f.student_id=? ORDER BY f.id DESC""",
             (student_id,),
+        )
+        return [dict(row) for row in cursor.fetchall()]
+
+    def list_fines(self, status=None, search=None):
+        cursor = self.db.cursor()
+        clauses, params = [], []
+        if status:
+            clauses.append("f.status=?")
+            params.append(status)
+        if search:
+            query = f"%{search}%"
+            clauses.append("(CAST(f.id AS TEXT) LIKE ? OR u.name LIKE ? OR f.student_id LIKE ? OR b.title LIKE ? OR b.isbn LIKE ?)")
+            params.extend([query, query, query, query, query])
+        sql = """SELECT f.*, u.name AS student_name, b.title AS book_title, b.isbn AS book_isbn,
+                t.due_date, t.return_date,
+                MAX(0, CAST(julianday(COALESCE(t.return_date, DATE('now'))) - julianday(t.due_date) AS INTEGER)) AS overdue_days
+                 FROM fines f
+                 JOIN transactions t ON t.id=f.transaction_id
+                 JOIN books b ON b.id=t.book_id
+                 JOIN users u ON u.user_id=f.student_id"""
+        if clauses:
+            sql += " WHERE " + " AND ".join(clauses)
+        sql += " ORDER BY f.id DESC"
+        return [dict(row) for row in cursor.execute(sql, params).fetchall()]
+
+    def mark_fine_paid(self, fine_id, collector_id):
+        cursor = self.db.cursor()
+        cursor.execute(
+            """UPDATE fines SET status='paid', payment_date=DATE('now'), collected_by=?
+               WHERE id=? AND status='unpaid'""",
+            (collector_id, fine_id),
+        )
+        if cursor.rowcount == 0:
+            exists = cursor.execute("SELECT 1 FROM fines WHERE id=?", (fine_id,)).fetchone()
+            return None, "Fine has already been paid." if exists else "Fine not found."
+        self.db.commit()
+        fine = cursor.execute(
+            """SELECT f.*, u.name AS student_name, b.title AS book_title
+               FROM fines f
+               JOIN transactions t ON t.id=f.transaction_id
+               JOIN books b ON b.id=t.book_id
+               JOIN users u ON u.user_id=f.student_id
+               WHERE f.id=?""",
+            (fine_id,),
+        ).fetchone()
+        return dict(fine), None
+
+    def waive_fine(self, fine_id, waived_by, reason):
+        cursor = self.db.cursor()
+        cursor.execute(
+            """UPDATE fines SET status='waived', waived_by=?, waive_reason=?, waived_at=CURRENT_TIMESTAMP
+               WHERE id=? AND status='unpaid'""",
+            (waived_by, reason, fine_id),
+        )
+        if cursor.rowcount == 0:
+            exists = cursor.execute("SELECT 1 FROM fines WHERE id=?", (fine_id,)).fetchone()
+            return None, "Fine has already been settled." if exists else "Fine not found."
+        self.db.commit()
+        fine = cursor.execute(
+            """SELECT f.*, u.name AS student_name, b.title AS book_title
+               FROM fines f
+               JOIN transactions t ON t.id=f.transaction_id
+               JOIN books b ON b.id=t.book_id
+               JOIN users u ON u.user_id=f.student_id
+               WHERE f.id=?""",
+            (fine_id,),
+        ).fetchone()
+        return dict(fine), None
+
+    def fine_summary(self):
+        cursor = self.db.cursor()
+        rows = cursor.execute(
+            "SELECT status, COUNT(*) AS count, COALESCE(SUM(amount), 0) AS total FROM fines GROUP BY status"
+        ).fetchall()
+        by_status = {row["status"]: {"count": row["count"], "total": row["total"]} for row in rows}
+        return {
+            "outstanding": by_status.get("unpaid", {}).get("total", 0),
+            "outstanding_count": by_status.get("unpaid", {}).get("count", 0),
+            "collected": by_status.get("paid", {}).get("total", 0),
+            "collected_count": by_status.get("paid", {}).get("count", 0),
+            "waived": by_status.get("waived", {}).get("total", 0),
+            "waived_count": by_status.get("waived", {}).get("count", 0),
+        }
+
+    def fine_collection_trend(self, days=14):
+        cursor = self.db.cursor()
+        since = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+        cursor.execute(
+            """SELECT payment_date AS day, COALESCE(SUM(amount), 0) AS total
+               FROM fines WHERE status='paid' AND payment_date >= ?
+               GROUP BY payment_date ORDER BY payment_date ASC""",
+            (since,),
         )
         return [dict(row) for row in cursor.fetchall()]
 

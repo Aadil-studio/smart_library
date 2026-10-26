@@ -54,7 +54,17 @@ class BookDAO:
         )
         return [dict(row) for row in cursor.fetchall()]
 
-    def filter_books(self, search=None, category=None, author=None, availability=None):
+    SORT_COLUMNS = {
+        "newest": "id DESC",
+        "oldest": "id ASC",
+        "title": "title COLLATE NOCASE ASC",
+        "title-desc": "title COLLATE NOCASE DESC",
+        "author": "author COLLATE NOCASE ASC",
+        "year": "publication_year DESC",
+        "availability": "available_copies DESC, id DESC",
+    }
+
+    def filter_books(self, search=None, category=None, author=None, availability=None, sort=None):
         """Combined search and filters used by the catalog API."""
         cursor = self.db.cursor()
         clauses, params = [], []
@@ -75,7 +85,7 @@ class BookDAO:
         query = "SELECT * FROM books"
         if clauses:
             query += " WHERE " + " AND ".join(clauses)
-        query += " ORDER BY id DESC"
+        query += " ORDER BY " + self.SORT_COLUMNS.get(sort or "newest", "id DESC")
         cursor.execute(query, params)
         return [dict(row) for row in cursor.fetchall()]
 

@@ -89,8 +89,9 @@ class LibraryController:
     def search_books(self, query):
         return self.book_dao.search_books(query)
 
-    def filter_books(self, search=None, category=None, author=None, availability=None):
-        return self.book_dao.filter_books(search=search, category=category, author=author, availability=availability)
+    def filter_books(self, search=None, category=None, author=None, availability=None, sort=None):
+        return self.book_dao.filter_books(search=search, category=category, author=author,
+                                          availability=availability, sort=sort)
 
     def get_book(self, book_id):
         return self.book_dao.get_book_by_id(book_id)
@@ -115,7 +116,9 @@ class LibraryController:
         return book_id if success else None
 
     def return_book(self, transaction_id, user_role="student"):
-        return self.borrow_dao.return_book(transaction_id, user_role)
+        from services.settings_service import SettingsService
+        fine_rate = SettingsService().get_int("fine_per_day", 10)
+        return self.borrow_dao.return_book(transaction_id, user_role, fine_rate=fine_rate)
 
     def list_transactions(self, student_id=None, status=None, search=None):
         return self.borrow_dao.list_transactions(student_id=student_id, status=status, search=search)
@@ -128,6 +131,77 @@ class LibraryController:
 
     def get_student_fines(self, student_id):
         return self.borrow_dao.get_student_fines(student_id)
+
+    def list_fines(self, status=None, search=None):
+        return self.borrow_dao.list_fines(status=status, search=search)
+
+    def collect_fine(self, fine_id, collector_id):
+        fine, error = self.borrow_dao.mark_fine_paid(fine_id, collector_id)
+        if error:
+            return False, error, None
+        self.notification_dao.notify(
+            fine["student_id"], "Fine payment received",
+            f"Your payment of Rs. {float(fine['amount']):.2f} for '{fine['book_title']}' has been recorded.",
+            ntype="fine", ref_id=fine_id,
+        )
+        collector = self.get_user(collector_id)
+        self.user_dao.log_activity(
+            collector_id, collector["name"] if collector else collector_id,
+            "FINE_COLLECTED", f"Collected Rs. {float(fine['amount']):.2f} for fine #{fine_id} from {fine['student_id']}.",
+        )
+        return True, "Fine payment collected.", fine
+
+    def waive_fine(self, fine_id, waived_by, reason):
+        fine, error = self.borrow_dao.waive_fine(fine_id, waived_by, reason)
+        if error:
+            return False, error, None
+        self.notification_dao.notify(
+            fine["student_id"], "Fine waived",
+            f"Your fine of Rs. {float(fine['amount']):.2f} for '{fine['book_title']}' has been waived. "
+            f"Reason: {reason}",
+            ntype="fine", ref_id=fine_id,
+        )
+        admin = self.get_user(waived_by)
+        self.user_dao.log_activity(
+            waived_by, admin["name"] if admin else waived_by,
+            "FINE_WAIVED", f"Waived Rs. {float(fine['amount']):.2f} (fine #{fine_id}, {fine['student_id']}). Reason: {reason}",
+        )
+        return True, "Fine waived.", fine
+
+    def fine_summary(self):
+        return self.borrow_dao.fine_summary()
+
+    def fine_collection_trend(self, days=14):
+        return self.borrow_dao.fine_collection_trend(days=days)
+
+    # --- User management (administrator) ---
+    def list_all_users(self, role=None, search=None, status=None):
+        return self.user_dao.get_all_users(role=role, search=search, status=status)
+
+    def set_user_role(self, user_id, role, acting_admin_id):
+        if user_id == acting_admin_id:
+            return False, "You cannot change your own role."
+        target = self.get_user(user_id)
+        if not target:
+            return False, "User not found."
+        if target["role"] == role:
+            return True, f"{target['name']} is already a {role}."
+        self.user_dao.set_user_role(user_id, role)
+        self.user_dao.log_activity(acting_admin_id, self.get_user(acting_admin_id)["name"],
+                                   "ROLE_CHANGE", f"{user_id} role changed {target['role']} -> {role}")
+        return True, f"{target['name']} is now a {role}."
+
+    # --- Library settings (administrator) ---
+    def get_library_settings(self):
+        from services.settings_service import SettingsService
+        return SettingsService().all()
+
+    def update_library_settings(self, updates):
+        from services.settings_service import SettingsService
+        service = SettingsService()
+        for key, value in updates.items():
+            service.set(key, value)
+        return self.get_library_settings()
 
     # --- Reservations ---
     def reserve_book(self, student_id, book_id):
@@ -197,6 +271,19 @@ class LibraryController:
         self.notification_dao.mark_all_read(user_id)
         return True, "All notifications marked as read."
 
+    def broadcast_notification(self, title, message, target_user_id=None):
+        """Library staff announcement: to one user, or to all active students."""
+        if target_user_id:
+            self.notification_dao.notify(target_user_id, title, message, ntype="announcement")
+            self.user_dao.log_activity(target_user_id, "", "ANNOUNCEMENT", title)
+            return 1
+        recipients = self.user_dao.get_users_by_role("student", status="active")
+        for student in recipients:
+            self.notification_dao.notify(student["user_id"], title, message, ntype="announcement")
+        self.user_dao.log_activity("system", "Library Staff", "ANNOUNCEMENT",
+                                   f"{title} (sent to {len(recipients)} students)")
+        return len(recipients)
+
     # --- Overdue sweep (due-soon + overdue detection with de-duplicated notifications) ---
     def run_overdue_sweep(self):
         from datetime import datetime
@@ -213,7 +300,9 @@ class LibraryController:
                 f"Fine so far: Rs. {days * 10.0}. Please return it as soon as possible.",
                 ntype="overdue", ref_id=trans["id"],
             )
-        for trans in self.borrow_dao.get_due_soon_transactions(within_days=3):
+        from services.settings_service import SettingsService
+        due_soon_days = max(0, min(365, SettingsService().get_int("due_soon_days", 3)))
+        for trans in self.borrow_dao.get_due_soon_transactions(within_days=due_soon_days):
             prefs = self.user_dao.get_preferences(trans["student_id"])
             if prefs.get("due_reminders", True) is False:
                 continue
@@ -256,14 +345,20 @@ class LibraryController:
 
     def get_admin_dashboard(self):
         report = self.report_summary()
+        fines = self.fine_summary()
         return {
             "stats": report,
+            "fine_stats": fines,
             "recent_borrows": self.borrow_dao.list_transactions()[:8],
+            "recent_returns": [t for t in self.borrow_dao.list_transactions(status="returned")][:8],
             "recent_registrations": self.user_dao.get_users_by_role("student")[:6],
             "overdue": self.borrow_dao.get_overdue_transactions()[:10],
             "top_books": self.borrow_dao.most_borrowed_books(limit=6),
             "category_distribution": self.book_dao.category_distribution(),
             "recent_activity": self.user_dao.get_all_activity_logs(limit=10),
+            "borrowing_trend": self.borrow_dao.borrowing_trend(days=14),
+            "user_growth": self.user_dao.user_growth(months=6),
+            "fine_trend": self.borrow_dao.fine_collection_trend(days=14),
         }
 
     def report_summary(self):
@@ -276,9 +371,5 @@ class LibraryController:
 
     def calculate_member_fine(self, role: str, days_overdue: int) -> float:
         from services.fine_strategy import FineContext, StudentFineStrategy, FacultyFineStrategy
-        context = FineContext()
-        if role.lower() == "faculty":
-            context.set_strategy(FacultyFineStrategy())
-        else:
-            context.set_strategy(StudentFineStrategy())
-        return context.compute_fine(days_overdue)
+        strategy = FacultyFineStrategy() if str(role).lower() == "faculty" else StudentFineStrategy()
+        return FineContext(strategy).compute_fine(days_overdue)
