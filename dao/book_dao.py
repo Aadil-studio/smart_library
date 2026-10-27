@@ -10,16 +10,20 @@ class BookDAO:
         self.db = DatabaseConnection().get_connection()
 
     def add_book(self, title: str, author: str, isbn: str, category="General", publisher="", edition="",
-                 publication_year=2026, total_copies=1, shelf_no="A1", description=""):
+                 publication_year=2026, total_copies=1, shelf_no="A1", description="", fee=None):
         cursor = self.db.cursor()
+        if fee is None:
+            # Every book carries the library book fee (Rs. 4000 by default)
+            from services.settings_service import SettingsService
+            fee = SettingsService().get_int("book_fee", 4000)
         try:
             cursor.execute(
                 """INSERT INTO books (title, author, isbn, category, publisher, edition, publication_year,
                                       total_copies, available_copies, shelf_no, is_available, description,
-                                      status, created_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, 'active', CURRENT_TIMESTAMP)""",
+                                      status, created_at, fee)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, 'active', CURRENT_TIMESTAMP, ?)""",
                 (title, author, isbn, category, publisher, edition, publication_year, total_copies,
-                 total_copies, shelf_no, description)
+                 total_copies, shelf_no, description, fee)
             )
             self.db.commit()
             return cursor.lastrowid
@@ -106,7 +110,7 @@ class BookDAO:
             return False, "Book not found."
 
         allowed = ("title", "author", "isbn", "category", "publisher", "edition",
-                   "publication_year", "shelf_no", "description", "status")
+                   "publication_year", "shelf_no", "description", "status", "fee")
         updates, params = [], []
         for column in allowed:
             if fields.get(column) is not None:
