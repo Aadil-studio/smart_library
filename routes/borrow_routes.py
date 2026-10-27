@@ -1,17 +1,15 @@
-from flask import Blueprint, request
+from fastapi import APIRouter, Depends, Request
 
 from routes import (current_user, fail, get_controller, json_body, login_required,
                     ok, parse_int, require_fields, staff_required)
 
-borrow_bp = Blueprint("borrow", __name__, url_prefix="/api/borrow")
+router = APIRouter(prefix="/api/borrow")
 
 
-@borrow_bp.post("")
-@login_required
-def issue_book():
-    controller = get_controller()
-    user = current_user()
-    data = json_body()
+@router.post("")
+async def issue_book(request: Request, user: dict = Depends(login_required)):
+    controller = get_controller(request)
+    data = await json_body(request)
     error = require_fields(data, "student_id", "book_id")
     if error:
         return fail(error)
@@ -42,6 +40,16 @@ def issue_book():
             return fail(f"No book found with ISBN '{book_ref}'.", 404)
         book_id = book["id"]
 
+    # Book-fee gate: books are only issued once the member's book fee is paid
+    unpaid_fees = controller.list_fees(student_id=student_id, status="unpaid")
+    if unpaid_fees:
+        total = sum(f["amount"] for f in unpaid_fees)
+        if user["role"] in ("admin", "librarian"):
+            return fail(f"{student_id} has an unpaid book fee of Rs. {total:.2f}. "
+                        "The admin must mark the fee paid before books can be issued.", 403)
+        return fail(f"You have an unpaid book fee of Rs. {total:.2f}. "
+                    "Pay it at the library admin portal before borrowing books.", 403)
+
     result = controller.borrow_dao.issue_book(student_id, book_id, days)
     success, message = result[0], result[1]
     if not success:
@@ -49,11 +57,9 @@ def issue_book():
     return ok(message=message)
 
 
-@borrow_bp.post("/<int:transaction_id>/return")
-@login_required
-def return_book(transaction_id):
-    controller = get_controller()
-    user = current_user()
+@router.post("/{transaction_id}/return")
+async def return_book(transaction_id: int, request: Request, user: dict = Depends(login_required)):
+    controller = get_controller(request)
     transaction = controller.borrow_dao.get_transaction_by_id(transaction_id)
     if not transaction:
         return fail("Active transaction not found (it may already have been returned).", 409)
@@ -65,14 +71,12 @@ def return_book(transaction_id):
     return ok(message=message)
 
 
-@borrow_bp.get("")
-@login_required
-def list_borrows():
-    controller = get_controller()
-    user = current_user()
-    scope = request.args.get("scope", "mine")
-    status = request.args.get("status", "").strip() or None
-    search = request.args.get("q", "").strip() or None
+@router.get("")
+async def list_borrows(request: Request, user: dict = Depends(login_required)):
+    controller = get_controller(request)
+    scope = request.query_params.get("scope", "mine")
+    status = request.query_params.get("status", "").strip() or None
+    search = request.query_params.get("q", "").strip() or None
 
     if scope == "all":
         if user["role"] not in ("admin", "librarian"):
@@ -83,11 +87,12 @@ def list_borrows():
     return ok(data={"transactions": transactions})
 
 
-@borrow_bp.get("/fines")
-@login_required
-def my_fines():
-    controller = get_controller()
-    user = current_user()
+@router.get("/fines")
+async def my_fines(request: Request, user: dict = Depends(login_required)):
+    controller = get_controller(request)
     fines = controller.borrow_dao.get_student_fines(user["user_id"])
     unpaid = sum(f["amount"] for f in fines if f["status"] == "unpaid")
-    return ok(data={"fines": fines, "unpaid_total": unpaid})
+    fees = controller.list_fees(student_id=user["user_id"])
+    fees_unpaid = sum(f["amount"] for f in fees if f["status"] == "unpaid")
+    return ok(data={"fines": fines, "unpaid_total": unpaid,
+                    "fees": fees, "fees_unpaid_total": fees_unpaid})
