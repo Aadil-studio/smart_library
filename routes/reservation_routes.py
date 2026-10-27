@@ -1,19 +1,17 @@
-from flask import Blueprint, request
+from fastapi import APIRouter, Depends, Request
 
-from routes import (current_user, fail, get_controller, json_body, login_required,
-                    ok, parse_int, require_fields, staff_required)
+from routes import (fail, get_controller, json_body, login_required,
+                    ok, parse_int, require_fields)
 
-reservation_bp = Blueprint("reservations", __name__, url_prefix="/api/reservations")
+router = APIRouter(prefix="/api/reservations")
 
 
-@reservation_bp.get("")
-@login_required
-def list_reservations():
-    controller = get_controller()
-    user = current_user()
-    scope = request.args.get("scope", "mine")
-    status = request.args.get("status", "").strip() or None
-    search = request.args.get("q", "").strip() or None
+@router.get("")
+async def list_reservations(request: Request, user: dict = Depends(login_required)):
+    controller = get_controller(request)
+    scope = request.query_params.get("scope", "mine")
+    status = request.query_params.get("status", "").strip() or None
+    search = request.query_params.get("q", "").strip() or None
 
     if scope == "all":
         if user["role"] not in ("admin", "librarian"):
@@ -24,14 +22,12 @@ def list_reservations():
     return ok(data={"reservations": reservations})
 
 
-@reservation_bp.post("")
-@login_required
-def create_reservation():
-    controller = get_controller()
-    user = current_user()
+@router.post("")
+async def create_reservation(request: Request, user: dict = Depends(login_required)):
+    controller = get_controller(request)
     if user["role"] not in ("student",):
         return fail("Only students can reserve books.", 403)
-    data = json_body()
+    data = await json_body(request)
     error = require_fields(data, "book_id")
     if error:
         return fail(error)
@@ -49,12 +45,10 @@ def create_reservation():
     return ok(message=message)
 
 
-@reservation_bp.put("/<int:reservation_id>")
-@login_required
-def update_reservation(reservation_id):
-    controller = get_controller()
-    user = current_user()
-    data = json_body()
+@router.put("/{reservation_id}")
+async def update_reservation(reservation_id: int, request: Request, user: dict = Depends(login_required)):
+    controller = get_controller(request)
+    data = await json_body(request)
     action = str(data.get("action", "")).strip().lower()
     if action not in ("approve", "reject", "fulfil", "cancel"):
         return fail("Action must be one of: approve, reject, fulfil, cancel.")
