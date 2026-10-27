@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import hashlib
 import json
 from datetime import datetime, timedelta
@@ -184,11 +186,13 @@ class UserDAO:
         return otp, None
 
     def verify_otp(self, email, otp):
+        """Returns (ok, message, otp_hash). The hash (never the raw code) backs the
+        signed reset token issued after a successful verification."""
         cursor = self.db.cursor()
         cursor.execute("SELECT user_id FROM users WHERE email=?", (email,))
         user = cursor.fetchone()
         if not user:
-            return False, "No account found with that email address."
+            return False, "No account found with that email address.", None
         cursor.execute(
             """SELECT id, otp_hash, expires_at FROM password_reset_otps
                WHERE user_id=? AND used=0 ORDER BY id DESC LIMIT 1""",
@@ -196,15 +200,38 @@ class UserDAO:
         )
         record = cursor.fetchone()
         if not record:
-            return False, "No active verification code. Please request a new one."
+            return False, "No active verification code. Please request a new one.", None
         if record["otp_hash"] != hashlib.sha256(str(otp).encode()).hexdigest():
-            return False, "That verification code is incorrect."
+            return False, "That verification code is incorrect.", None
+        if datetime.now() > datetime.strptime(record["expires_at"], "%Y-%m-%d %H:%M:%S"):
+            return False, "That verification code has expired. Please request a new one.", None
+        return True, "OTP verified.", record["otp_hash"]
+
+    def reset_password_with_hash(self, email, otp_hash, new_password):
+        """Complete the reset using the OTP hash carried inside a verified reset token."""
+        cursor = self.db.cursor()
+        cursor.execute("SELECT user_id, name FROM users WHERE email=?", (email,))
+        user = cursor.fetchone()
+        if not user:
+            return False, "No account found with that email address."
+        cursor.execute(
+            """SELECT id, expires_at FROM password_reset_otps
+               WHERE user_id=? AND used=0 AND otp_hash=? ORDER BY id DESC LIMIT 1""",
+            (user["user_id"], otp_hash),
+        )
+        record = cursor.fetchone()
+        if not record:
+            return False, "That verification code is invalid or was already used."
         if datetime.now() > datetime.strptime(record["expires_at"], "%Y-%m-%d %H:%M:%S"):
             return False, "That verification code has expired. Please request a new one."
-        return True, "OTP verified."
+        cursor.execute("UPDATE users SET password=? WHERE email=?", (self._hash_password(new_password), email))
+        cursor.execute("UPDATE password_reset_otps SET used=1 WHERE id=?", (record["id"],))
+        self.db.commit()
+        self.log_activity(user["user_id"], user["name"], "PASSWORD_RESET", "Password reset using OTP successfully")
+        return True, "Password reset successfully. You can sign in now."
 
     def reset_password_with_otp(self, email, otp, new_password):
-        ok, message = self.verify_otp(email, otp)
+        ok, message, _otp_hash = self.verify_otp(email, otp)
         if not ok:
             return False, message
         cursor = self.db.cursor()
