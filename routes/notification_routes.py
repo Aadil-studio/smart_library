@@ -1,49 +1,43 @@
-from flask import Blueprint, request
+from fastapi import APIRouter, Depends, Request
 
-from routes import (current_user, fail, get_controller, json_body, login_required,
+from routes import (fail, get_controller, json_body, login_required,
                     ok, require_fields, staff_required)
 
-notification_bp = Blueprint("notifications", __name__, url_prefix="/api/notifications")
+router = APIRouter(prefix="/api/notifications")
 
 
-@notification_bp.get("")
-@login_required
-def list_notifications():
-    controller = get_controller()
-    user = current_user()
-    unread_only = request.args.get("unread") == "1"
+@router.get("")
+async def list_notifications(request: Request, user: dict = Depends(login_required)):
+    controller = get_controller(request)
+    unread_only = request.query_params.get("unread") == "1"
     notifications = controller.list_notifications(user["user_id"], unread_only=unread_only)
     return ok(data={"notifications": notifications, "unread": controller.unread_count(user["user_id"])})
 
 
-@notification_bp.get("/unread-count")
-@login_required
-def unread_count():
-    controller = get_controller()
-    return ok(data={"unread": controller.unread_count(current_user()["user_id"])})
+@router.get("/unread-count")
+async def unread_count(request: Request, user: dict = Depends(login_required)):
+    controller = get_controller(request)
+    return ok(data={"unread": controller.unread_count(user["user_id"])})
 
 
-@notification_bp.put("/<int:notification_id>/read")
-@login_required
-def mark_read(notification_id):
-    success = get_controller().mark_notification_read(notification_id, current_user()["user_id"])
+@router.put("/{notification_id}/read")
+async def mark_read(notification_id: int, request: Request, user: dict = Depends(login_required)):
+    success = get_controller(request).mark_notification_read(notification_id, user["user_id"])
     if not success:
         return fail("Notification not found.", 404)
     return ok(message="Notification marked as read.")
 
 
-@notification_bp.put("/read-all")
-@login_required
-def mark_all_read():
-    message = get_controller().mark_all_notifications_read(current_user()["user_id"])
+@router.put("/read-all")
+async def mark_all_read(request: Request, user: dict = Depends(login_required)):
+    message = get_controller(request).mark_all_notifications_read(user["user_id"])
     return ok(message=message)
 
 
-@notification_bp.post("/broadcast")
-@staff_required
-def broadcast():
-    controller = get_controller()
-    data = json_body()
+@router.post("/broadcast")
+async def broadcast(request: Request, user: dict = Depends(staff_required)):
+    controller = get_controller(request)
+    data = await json_body(request)
     error = require_fields(data, "title", "message")
     if error:
         return fail(error)
