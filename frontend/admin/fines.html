@@ -50,11 +50,35 @@
       async function load() {
         try {
           const current = await request("/api/auth/me");
+          const meRole = current.data.user.role;
           document.getElementById("uname").textContent = current.data.user.name;
           document.getElementById("uav").textContent = current.data.user.name.charAt(0).toUpperCase();
           const result = await request("/api/fines");
           const fines = result.data.fines;
-          content.innerHTML = `<div class="stats"><div class="stat"><small>Unpaid</small><strong>Rs. ${Number(result.data.summary.unpaid_total || 0).toFixed(2)}</strong></div><div class="stat"><small>Collected</small><strong>Rs. ${Number(result.data.summary.paid_total || 0).toFixed(2)}</strong></div></div>${fines.length ? `<table><tr><th>Member</th><th>Book</th><th>Amount</th><th>Status</th><th></th></tr>${fines.map((fine) => `<tr><td>${esc(fine.student_name || fine.student_id)}</td><td>${esc(fine.book_title)}</td><td>Rs. ${Number(fine.amount).toFixed(2)}</td><td><span class="tag">${esc(fine.status)}</span></td><td>${fine.status === "unpaid" ? `<button class="btn sm" onclick="collectFine(${Number(fine.id)})">Mark paid</button>` : ""}</td></tr>`).join("")}</table>` : "<p>No fines have been recorded.</p>"}`;
+          const fees = await request("/api/fees");
+          const canManage = meRole === "admin"; // only the admin uploads fees and grants "paid"
+          const feeRows = fees.data.fees.map((fee) => `<tr><td>${esc(fee.student_name || fee.student_id)}</td><td>${esc(fee.book_title || "General Library Book Fee")}</td><td>Rs. ${Number(fee.amount).toFixed(2)}</td><td><span class="tag">${esc(fee.status)}</span></td><td>${canManage && fee.status === "unpaid" ? `<button class="btn sm" onclick="payFee(${Number(fee.id)})">Mark paid</button>` : ""} <a class="btn sm g" href="/api/fees/${Number(fee.id)}/receipt.pdf" download>Receipt PDF</a></td></tr>`).join("");
+          content.innerHTML = `<div class="stats"><div class="stat"><small>Unpaid fines</small><strong>Rs. ${Number(result.data.summary.outstanding || 0).toFixed(2)}</strong></div><div class="stat"><small>Collected fines</small><strong>Rs. ${Number(result.data.summary.collected || 0).toFixed(2)}</strong></div><div class="stat"><small>Unpaid book fees</small><strong>Rs. ${Number(fees.data.summary.outstanding || 0).toFixed(2)}</strong></div></div><h3 style="margin-top:24px">Fines</h3>${fines.length ? `<table><tr><th>Member</th><th>Book</th><th>Amount</th><th>Status</th><th></th></tr>${fines.map((fine) => `<tr><td>${esc(fine.student_name || fine.student_id)}</td><td>${esc(fine.book_title)}</td><td>Rs. ${Number(fine.amount).toFixed(2)}</td><td><span class="tag">${esc(fine.status)}</span></td><td>${canManage && fine.status === "unpaid" ? `<button class="btn sm" onclick="collectFine(${Number(fine.id)})">Mark paid</button>` : ""}</td></tr>`).join("")}</table>` : "<p>No fines have been recorded.</p>"}<h3 style="margin-top:26px">Book fees (Rs. 4000 by default)</h3>${canManage ? `<div class="panel" style="margin-bottom:14px"><h4>Upload a fee for a member</h4><form id="feerow" class="row2" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr))"><input id="fee_student" placeholder="Student ID (e.g. STU-1001)" required><input id="fee_amount" type="number" min="1" value="4000" title="Amount in Rs"><input id="fee_book" placeholder="Book ID (optional)"><button class="btn">Upload fee</button></form><p style="color:var(--mu)">The fee is published to the student's portal immediately. Books can only be issued once the fee is paid — only you can mark it paid.</p></div>` : `<p style="color:var(--mu)">Only the administrator can upload fees or mark them paid.</p>`}${fees.data.fees.length ? `<table><tr><th>Member</th><th>Book</th><th>Fee</th><th>Status</th><th></th></tr>${feeRows}</table>` : "<p>No book fees have been uploaded yet.</p>"}`;
+          const feeForm = document.getElementById("feerow");
+          if (feeForm) {
+            feeForm.onsubmit = async (event) => {
+              event.preventDefault();
+              try {
+                await request("/api/fees", {
+                  method: "POST",
+                  body: JSON.stringify({
+                    student_id: document.getElementById("fee_student").value.trim(),
+                    amount: document.getElementById("fee_amount").value,
+                    book_id: document.getElementById("fee_book").value || undefined,
+                  }),
+                });
+                notify("Fee uploaded and published to the student portal.");
+                await load();
+              } catch (error) {
+                notify(error.message);
+              }
+            };
+          }
         } catch (error) {
           if (error.status === 401) {
             location.replace("../login.html");
@@ -67,6 +91,14 @@
       window.collectFine = async (id) => {
         try {
           await request(`/api/fines/${id}/collect`, { method: "POST" });
+          await load();
+        } catch (error) {
+          notify(error.message);
+        }
+      };
+      window.payFee = async (id) => {
+        try {
+          await request(`/api/fees/${id}/pay`, { method: "POST" });
           await load();
         } catch (error) {
           notify(error.message);
