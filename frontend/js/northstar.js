@@ -499,12 +499,13 @@ function attachAuthForms() {
 
   const otpForm = $("fo");
   if (otpForm) {
-    const email = sessionStorage.getItem("nl_reset_email");
+    const email = new URLSearchParams(location.search).get("email") || sessionStorage.getItem("nl_reset_email");
     const devOtp = sessionStorage.getItem("nl_reset_dev_otp");
     if (!email) {
       location.replace(`${BASE}forgot-password.html`);
       return;
     }
+    sessionStorage.setItem("nl_reset_email", email);
     if (devOtp) {
       $("devcode").textContent = devOtp;
     } else if ($("devcode")) {
@@ -526,11 +527,17 @@ function attachAuthForms() {
       event.preventDefault();
       const otp = inputs.map((input) => input.value).join("");
       try {
-        await api("/auth/verify-otp", {
+        const result = await api("/auth/verify-otp", {
           method: "POST",
           body: JSON.stringify({ email, otp }),
         });
+        // Only after a verified OTP is a change of password allowed
         sessionStorage.setItem("nl_reset_otp", otp);
+        if (result.data && result.data.reset_token) {
+          sessionStorage.setItem("nl_reset_token", result.data.reset_token);
+        } else {
+          sessionStorage.removeItem("nl_reset_token");
+        }
         location.href = `${BASE}reset-password.html`;
       } catch (error) {
         toast(error.message);
@@ -540,11 +547,26 @@ function attachAuthForms() {
 
   const resetForm = $("fr");
   if (resetForm) {
+    // Users arriving from the emailed link carry the email in the URL
+    const emailParam = new URLSearchParams(location.search).get("email");
+    if (emailParam) {
+      sessionStorage.setItem("nl_reset_email", emailParam.trim().toLowerCase());
+    }
     const email = sessionStorage.getItem("nl_reset_email");
     const otp = sessionStorage.getItem("nl_reset_otp");
-    if (!email || !otp) {
+    const resetToken = sessionStorage.getItem("nl_reset_token");
+    if (!email) {
       location.replace(`${BASE}forgot-password.html`);
       return;
+    }
+    // Arriving from otp.html the code was already verified; from the email link
+    // the user types the 6-digit code here before a new password is accepted.
+    const otpInput = $("ro");
+    if (otpInput) {
+      otpInput.value = otp || "";
+      otpInput.addEventListener("input", () => {
+        otpInput.value = otpInput.value.replace(/\D/g, "").slice(0, 6);
+      });
     }
     resetForm.onsubmit = async (event) => {
       event.preventDefault();
@@ -552,18 +574,29 @@ function attachAuthForms() {
         toast("Passwords do not match.");
         return;
       }
+      const enteredOtp = otpInput ? otpInput.value.trim() : "";
+      const body = {
+        new_password: $("rp").value,
+        confirm_password: $("rc").value,
+      };
+      if (resetToken) {
+        body.reset_token = resetToken;
+      } else {
+        if (!enteredOtp) {
+          toast("Enter the 6-digit code we emailed you first.");
+          return;
+        }
+        body.email = email;
+        body.otp = enteredOtp;
+      }
       try {
         await api("/auth/reset-password", {
           method: "POST",
-          body: JSON.stringify({
-            email,
-            otp,
-            new_password: $("rp").value,
-            confirm_password: $("rc").value,
-          }),
+          body: JSON.stringify(body),
         });
         sessionStorage.removeItem("nl_reset_email");
         sessionStorage.removeItem("nl_reset_otp");
+        sessionStorage.removeItem("nl_reset_token");
         sessionStorage.removeItem("nl_reset_dev_otp");
         toast("Password updated. Please sign in.");
         setTimeout(() => {
