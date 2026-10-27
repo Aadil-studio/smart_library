@@ -1,8 +1,10 @@
 """End-to-end API tests: auth, role authorization, books, borrow/return, reservations,
-notifications, overdue sweep, OTP reset, profile — all against an in-memory database."""
+notifications, overdue sweep, OTP reset, book fee + PDF receipt, profile — all against
+an in-memory database."""
 import sqlite3
 
 import pytest
+from fastapi.testclient import TestClient
 
 from config.database import DatabaseConnection
 
@@ -13,6 +15,8 @@ def api(monkeypatch):
     monkeypatch.setenv("ADMIN_EMAIL", "admin@library.com")
     monkeypatch.setenv("ADMIN_PASSWORD", "admin123")
     monkeypatch.setenv("OTP_DEV_MODE", "1")
+    # the live server runs HTTPS with Secure cookies; the test client is plain HTTP
+    monkeypatch.setenv("SESSION_COOKIE_SECURE", "0")
     monkeypatch.delenv("SMTP_HOST", raising=False)
 
     instance = object.__new__(DatabaseConnection)
@@ -21,23 +25,23 @@ def api(monkeypatch):
     instance.connection.execute("PRAGMA foreign_keys = ON")
     monkeypatch.setattr(DatabaseConnection, "_instance", instance)
 
-    import app as app_module
-    flask_app = app_module.create_app()
-    flask_app.config.update(TESTING=True, DEBUG=False)
+    import main as main_module
+    fastapi_app = main_module.create_app()
 
-    controller = flask_app.extensions["library_controller"]
+    controller = fastapi_app.state.library_controller
     controller.register("STU999", "Nina Wells", "nina@library.com", "passw0rd1", role="student",
                         department="CS", semester="4")
     controller.register("STAFF01", "Librarian Ray", "ray@library.com", "passw0rd1", role="librarian")
 
-    client = flask_app.test_client()
-    yield client, controller, flask_app
+    from fastapi.testclient import TestClient
+    client = TestClient(fastapi_app, follow_redirects=False)
+    yield client, controller, fastapi_app
     instance.connection.close()
 
 
 def login_as(client, credential, password):
     response = client.post("/api/auth/login", json={"credential": credential, "password": password})
-    assert response.status_code == 200, response.get_json()
+    assert response.status_code == 200, response.json()
     return response
 
 
@@ -55,16 +59,16 @@ def test_register_login_and_me(api):
         "student_id": "STU-2048", "full_name": "Alex Morgan", "email": "alex@uni.edu",
         "password": "secret12", "confirm_password": "secret12"})
     assert response.status_code == 200
-    assert response.get_json()["data"]["user"]["role"] == "student"
+    assert response.json()["data"]["user"]["role"] == "student"
 
     client.post("/api/auth/logout")
     wrong = client.post("/api/auth/login", json={"credential": "alex@uni.edu", "password": "wrongpass"})
     assert wrong.status_code == 401
-    assert wrong.get_json()["message"] == "Incorrect password."
+    assert wrong.json()["message"] == "Incorrect password."
 
     missing = client.post("/api/auth/login", json={"credential": "missing@library.com", "password": "secret12"})
     assert missing.status_code == 404
-    assert missing.get_json()["message"] == "Account not found."
+    assert missing.json()["message"] == "Account not found."
 
     deactivated = client.post("/api/auth/register", json={
         "student_id": "STU-2049", "full_name": "Inactive User", "email": "inactive@uni.edu",
@@ -74,10 +78,10 @@ def test_register_login_and_me(api):
         conn.execute("UPDATE users SET status='inactive' WHERE email='inactive@uni.edu'")
     disabled = client.post("/api/auth/login", json={"credential": "inactive@uni.edu", "password": "secret12"})
     assert disabled.status_code == 403
-    assert disabled.get_json()["message"] == "Your account has been disabled. Please contact the library administrator."
+    assert disabled.json()["message"] == "Your account has been disabled. Please contact the library administrator."
 
     login_as(client, "alex@uni.edu", "secret12")
-    me = client.get("/api/auth/me").get_json()
+    me = client.get("/api/auth/me").json()
     assert me["data"]["user"]["email"] == "alex@uni.edu"
     assert "password" not in me["data"]["user"]
 
@@ -102,11 +106,11 @@ def test_register_validation(api):
 
 def test_production_startup_requires_session_secret(api, monkeypatch):
     _, _, _ = api
-    monkeypatch.setenv("FLASK_DEBUG", "0")
+    monkeypatch.setenv("APP_DEBUG", "0")
     monkeypatch.setenv("SECRET_KEY", "")
-    import app as app_module
+    import main as main_module
     with pytest.raises(RuntimeError, match="Set SECRET_KEY"):
-        app_module.create_app()
+        main_module.create_app()
 
 
 def test_legacy_password_hashes_are_upgraded(api):
@@ -126,7 +130,7 @@ def test_legacy_password_hashes_are_upgraded(api):
 def test_password_reset_otp_flow(api):
     client, _, _ = api
     response = client.post("/api/auth/forgot-password", json={"email": "nina@library.com"})
-    otp = response.get_json()["data"]["dev_otp"]
+    otp = response.json()["data"]["dev_otp"]
     assert len(otp) == 6
 
     assert client.post("/api/auth/verify-otp", json={"email": "nina@library.com", "otp": "000000"}).status_code == 400
@@ -141,6 +145,35 @@ def test_password_reset_otp_flow(api):
         "confirm_password": "another12"}).status_code == 400
     # Unknown email gets a neutral answer (no account enumeration)
     assert client.post("/api/auth/forgot-password", json={"email": "ghost@nowhere.io"}).status_code == 200
+
+
+def test_password_reset_requires_otp_verification_first(api):
+    """The OTP is verified before the reset: a signed token unlocks the change,
+    and it cannot be reused, and the reset is refused without OTP or token."""
+    client, _, _ = api
+    # Without a verified OTP (and without a token) the reset is rejected
+    assert client.post("/api/auth/reset-password", json={
+        "email": "nina@library.com", "otp": "000000", "new_password": "newpass99",
+        "confirm_password": "newpass99"}).status_code == 400
+
+    response = client.post("/api/auth/forgot-password", json={"email": "nina@library.com"})
+    otp = response.json()["data"]["dev_otp"]
+    verified = client.post("/api/auth/verify-otp", json={"email": "nina@library.com", "otp": otp})
+    token = verified.json()["data"]["reset_token"]
+    assert token
+
+    reset = client.post("/api/auth/reset-password", json={
+        "reset_token": token, "new_password": "brandnew9", "confirm_password": "brandnew9"})
+    assert reset.status_code == 200
+    login_as(client, "nina@library.com", "brandnew9")
+    # A verified token is single-use
+    again = client.post("/api/auth/reset-password", json={
+        "reset_token": token, "new_password": "onemore99", "confirm_password": "onemore99"})
+    assert again.status_code == 400
+    # Forged tokens are refused
+    assert client.post("/api/auth/reset-password", json={
+        "reset_token": "forged-token", "new_password": "hackpass9",
+        "confirm_password": "hackpass9"}).status_code == 400
 
 
 # --- Role authorization ---
@@ -217,7 +250,7 @@ def test_librarian_manages_but_only_admin_deletes(api):
     created = client.post("/api/books", json={"title": "Refactoring", "author": "M. Fowler",
                                               "isbn": "978-0201485677", "total_copies": 1})
     assert created.status_code == 200
-    book_id = created.get_json()["data"]["book"]["id"]
+    book_id = created.json()["data"]["book"]["id"]
     assert client.delete(f"/api/books/{book_id}").status_code == 403
 
     login_as(client, "admin@library.com", "admin123")
@@ -234,7 +267,9 @@ def test_book_crud_and_search(api):
         "category": "Engineering", "total_copies": 3, "publication_year": 2008,
         "shelf_no": "B2", "description": "A handbook of agile software craftsmanship."})
     assert created.status_code == 200
-    book_id = created.get_json()["data"]["book"]["id"]
+    book_id = created.json()["data"]["book"]["id"]
+    # Every book carries the Rs. 4000 library fee by default
+    assert created.json()["data"]["book"]["fee"] == 4000
 
     assert client.post("/api/books", json={"title": "No Author", "author": "", "isbn": "x"}).status_code == 400
     assert client.post("/api/books", json={"title": "Dup", "author": "A", "isbn": "978-0132350884"}).status_code == 409
@@ -242,9 +277,14 @@ def test_book_crud_and_search(api):
 
     updated = client.put(f"/api/books/{book_id}", json={"total_copies": 1, "shelf_no": "C1"})
     assert updated.status_code == 200
-    assert updated.get_json()["data"]["book"]["available_copies"] == 1
+    assert updated.json()["data"]["book"]["available_copies"] == 1
 
-    listing = client.get("/api/books?q=clean").get_json()["data"]["books"]
+    # Custom fee per title can be set and updated
+    priced = client.put(f"/api/books/{book_id}", json={"fee": 2500})
+    assert priced.status_code == 200
+    assert priced.json()["data"]["book"]["fee"] == 2500
+
+    listing = client.get("/api/books?q=clean").json()["data"]["books"]
     assert [b["id"] for b in listing] == [book_id]
     assert client.get("/api/books?availability=available").status_code == 200
     assert client.get(f"/api/books/{book_id}").status_code == 200
@@ -253,7 +293,7 @@ def test_book_crud_and_search(api):
 
 # --- Borrow / Return ---
 def test_borrow_return_cycle_and_guards(api):
-    client, controller, flask_app = api
+    client, controller, fastapi_app = api
     login_as(client, "ray@library.com", "passw0rd1")
     book_id = add_book(controller, copies=1)
 
@@ -262,7 +302,7 @@ def test_borrow_return_cycle_and_guards(api):
     # no copies left -> rejected; duplicate active loan -> rejected
     assert client.post("/api/borrow", json={"student_id": "STU999", "book_id": book_id}).status_code == 409
 
-    loans = client.get("/api/borrow?scope=all").get_json()["data"]["transactions"]
+    loans = client.get("/api/borrow?scope=all").json()["data"]["transactions"]
     loan_id = loans[0]["id"]
 
     # duplicate return protection
@@ -271,14 +311,14 @@ def test_borrow_return_cycle_and_guards(api):
     assert controller.get_book(book_id)["available_copies"] == 1
 
     # the student sees the return notification on their own session
-    student_client = flask_app.test_client()
+    student_client = TestClient(fastapi_app, follow_redirects=False)
     login_as(student_client, "nina@library.com", "passw0rd1")
-    notes = student_client.get("/api/notifications").get_json()["data"]["notifications"]
+    notes = student_client.get("/api/notifications").json()["data"]["notifications"]
     assert any(n.get("type") == "return" for n in notes)
 
 
 def test_staff_fine_collection_updates_records_and_notifies_student(api):
-    client, controller, flask_app = api
+    client, controller, fastapi_app = api
     book_id = add_book(controller, isbn="978-4444444444")
     login_as(client, "ray@library.com", "passw0rd1")
     assert client.post("/api/borrow", json={"student_id": "STU999", "book_id": book_id}).status_code == 200
@@ -288,32 +328,32 @@ def test_staff_fine_collection_updates_records_and_notifies_student(api):
     assert client.post(f"/api/borrow/{transaction_id}/return").status_code == 200
 
     fines_response = client.get("/api/fines?status=unpaid")
-    assert fines_response.status_code == 200, fines_response.get_json()
-    fines = fines_response.get_json()["data"]["fines"]
+    assert fines_response.status_code == 200, fines_response.json()
+    fines = fines_response.json()["data"]["fines"]
     assert len(fines) == 1
     fine_id = fines[0]["id"]
     assert fines[0]["student_name"] == "Nina Wells"
     assert fines[0]["status"] == "unpaid"
-    assert client.get(f"/api/fines?q={fine_id}").get_json()["data"]["fines"][0]["id"] == fine_id
-    member_details = client.get("/api/students/STU999").get_json()["data"]
+    assert client.get(f"/api/fines?q={fine_id}").json()["data"]["fines"][0]["id"] == fine_id
+    member_details = client.get("/api/students/STU999").json()["data"]
     assert member_details["fines"][0]["id"] == fine_id
     assert member_details["borrow_history"][0]["return_date"]
 
-    student_client = flask_app.test_client()
+    student_client = TestClient(fastapi_app, follow_redirects=False)
     login_as(student_client, "nina@library.com", "passw0rd1")
     assert student_client.post(f"/api/fines/{fine_id}/collect").status_code == 403
 
     collected = client.post(f"/api/fines/{fine_id}/collect")
-    assert collected.status_code == 200, collected.get_json()
-    fine = collected.get_json()["data"]["fine"]
+    assert collected.status_code == 200, collected.json()
+    fine = collected.json()["data"]["fine"]
     assert fine["status"] == "paid"
     assert fine["collected_by"] == "STAFF01"
     assert fine["payment_date"]
     assert client.post(f"/api/fines/{fine_id}/collect").status_code == 409
 
-    student_fines = student_client.get("/api/borrow/fines").get_json()["data"]["fines"]
+    student_fines = student_client.get("/api/borrow/fines").json()["data"]["fines"]
     assert student_fines[0]["status"] == "paid"
-    student_notes = student_client.get("/api/notifications").get_json()["data"]["notifications"]
+    student_notes = student_client.get("/api/notifications").json()["data"]["notifications"]
     assert any(note["type"] == "fine" for note in student_notes)
     assert any(log["action"] == "FINE_COLLECTED" for log in controller.get_activity_logs())
 
@@ -335,6 +375,78 @@ def test_overdue_detection_and_sweep(api):
                      if n["type"] == "overdue"]
     assert len(overdue_notes) == 1
     assert sweep_again["newly_marked_overdue"] == 0
+
+
+# --- Book fee (Rs. 4000): admin uploads, admin grants paid, unpaid blocks borrowing ---
+def test_admin_uploads_fee_and_controls_payment(api):
+    client, controller, fastapi_app = api
+    book_id = add_book(controller, isbn="978-8888888888", copies=1)
+    controller.register("STUOTHER", "Other Member", "other@library.com", "passw0rd1", role="student")
+
+    # only the ADMIN can upload a fee (librarian and student are refused)
+    login_as(client, "ray@library.com", "passw0rd1")
+    assert client.post("/api/fees", json={"student_id": "STU999"}).status_code == 403
+    login_as(client, "nina@library.com", "passw0rd1")
+    assert client.post("/api/fees", json={"student_id": "STU999"}).status_code == 403
+
+    # the admin uploads the fee — default amount is the library fee (Rs. 4000)
+    login_as(client, "admin@library.com", "admin123")
+    uploaded = client.post("/api/fees", json={"student_id": "STU999", "book_id": book_id})
+    assert uploaded.status_code == 200, uploaded.json()
+    fee = uploaded.json()["data"]["fee"]
+    assert fee["amount"] == 4000
+    assert fee["status"] == "unpaid"
+    assert fee["uploaded_by"] == "ADMIN001"
+
+    # the fee is published to the student portal automatically
+    login_as(client, "nina@library.com", "passw0rd1")
+    my_fees = client.get("/api/fees").json()["data"]["fees"]
+    assert [f["id"] for f in my_fees] == [fee["id"]]
+    assert my_fees[0]["status"] == "unpaid"
+
+    # unpaid fee -> no book: borrowing is blocked until the fee is paid
+    blocked = client.post("/api/borrow", json={"student_id": "STU999", "book_id": book_id})
+    assert blocked.status_code == 403
+    assert "unpaid book fee" in blocked.json()["message"]
+
+    # the student cannot grant "paid", and neither can the librarian — admin only
+    assert client.post(f"/api/fees/{fee['id']}/pay").status_code == 403
+    login_as(client, "ray@library.com", "passw0rd1")
+    assert client.post(f"/api/fees/{fee['id']}/pay").status_code == 403
+
+    # the admin grants paid -> the student portal shows it automatically
+    login_as(client, "admin@library.com", "admin123")
+    paid = client.post(f"/api/fees/{fee['id']}/pay")
+    assert paid.status_code == 200, paid.json()
+    assert paid.json()["data"]["fee"]["status"] == "paid"
+    assert paid.json()["data"]["fee"]["collected_by"] == "ADMIN001"
+
+    # fee paid -> the book is issued, and the student portal shows the paid fee
+    login_as(client, "nina@library.com", "passw0rd1")
+    assert client.post("/api/borrow", json={"student_id": "STU999", "book_id": book_id}).status_code == 200
+    portal = client.get("/api/fees").json()["data"]["fees"]
+    assert portal[0]["status"] == "paid"
+    # the student was notified about the upload and the payment
+    notes = controller.notification_dao.get_user_notifications("STU999")
+    assert any(n["type"] == "fee" for n in notes)
+    assert any(log["action"] == "FEE_UPLOADED" for log in controller.get_activity_logs())
+    # the PDF receipt is still downloadable (also after payment)
+    receipt = client.get(f"/api/fees/{fee['id']}/receipt.pdf")
+    assert receipt.status_code == 200
+    assert receipt.headers["content-type"].startswith("application/pdf")
+    assert receipt.content.startswith(b"%PDF")
+
+
+def test_fee_upload_defaults_to_configured_amount(api):
+    client, controller, _ = api
+    login_as(client, "admin@library.com", "admin123")
+    assert client.put("/api/settings", json={"book_fee": 500}).status_code == 200
+    uploaded = client.post("/api/fees", json={"student_id": "STU999"})
+    assert uploaded.status_code == 200, uploaded.json()
+    assert uploaded.json()["data"]["fee"]["amount"] == 500
+    # unknown member and invalid amounts are rejected
+    assert client.post("/api/fees", json={"student_id": "GHOST"}).status_code == 404
+    assert client.post("/api/fees", json={"student_id": "STU999", "amount": 0}).status_code == 400
 
 
 # --- Reservations ---
@@ -379,12 +491,12 @@ def test_notification_read_state(api):
     client, controller, _ = api
     login_as(client, "nina@library.com", "passw0rd1")
     controller.notification_dao.notify("STU999", "Hello", "Test message")
-    data = client.get("/api/notifications").get_json()["data"]
+    data = client.get("/api/notifications").json()["data"]
     assert data["unread"] >= 1
     note_id = data["notifications"][0]["id"]
     assert client.put(f"/api/notifications/{note_id}/read").status_code == 200
     assert client.put("/api/notifications/read-all").status_code == 200
-    assert client.get("/api/notifications/unread-count").get_json()["data"]["unread"] == 0
+    assert client.get("/api/notifications/unread-count").json()["data"]["unread"] == 0
 
 
 # --- Profile & settings ---
@@ -394,7 +506,7 @@ def test_profile_update_change_password_and_preferences(api):
 
     updated = client.put("/api/profile", json={"name": "Nina C. Wells", "phone": "0300-1234567"})
     assert updated.status_code == 200
-    assert updated.get_json()["data"]["profile"]["name"] == "Nina C. Wells"
+    assert updated.json()["data"]["profile"]["name"] == "Nina C. Wells"
 
     assert client.put("/api/profile/password", json={
         "current_password": "wrongpass", "new_password": "passw0rd2",
@@ -405,7 +517,7 @@ def test_profile_update_change_password_and_preferences(api):
     login_as(client, "nina@library.com", "passw0rd2")
 
     prefs = client.put("/api/profile/preferences", json={"due_reminders": False})
-    assert prefs.get_json()["data"]["preferences"]["due_reminders"] is False
+    assert prefs.json()["data"]["preferences"]["due_reminders"] is False
 
 
 # --- Dashboards & reports ---
@@ -416,12 +528,12 @@ def test_dashboards_and_reports(api):
     client.post("/api/borrow", json={"student_id": "STU999", "book_id": book_id})
 
     login_as(client, "nina@library.com", "passw0rd1")
-    student_view = client.get("/api/dashboard").get_json()["data"]
+    student_view = client.get("/api/dashboard").json()["data"]
     assert student_view["role_view"] == "student"
     assert student_view["stats"]["active_loans"] == 1
 
     login_as(client, "admin@library.com", "admin123")
-    admin_view = client.get("/api/dashboard").get_json()["data"]
+    admin_view = client.get("/api/dashboard").json()["data"]
     assert admin_view["role_view"] == "staff"
     assert admin_view["stats"]["total_books"] >= 1
     assert client.get("/api/reports/summary").status_code == 200
@@ -449,14 +561,14 @@ def test_fine_collect_flow(api):
     fine_id = create_overdue_fine(api)
     login_as(client, "ray@library.com", "passw0rd1")
 
-    listing = client.get("/api/fines").get_json()["data"]
+    listing = client.get("/api/fines").json()["data"]
     assert listing["summary"]["outstanding"] > 0
     assert any(f["id"] == fine_id for f in listing["fines"])
 
     collected = client.post(f"/api/fines/{fine_id}/collect")
     assert collected.status_code == 200
-    assert collected.get_json()["data"]["fine"]["status"] == "paid"
-    assert collected.get_json()["data"]["fine"]["collected_by"]
+    assert collected.json()["data"]["fine"]["status"] == "paid"
+    assert collected.json()["data"]["fine"]["collected_by"]
     # duplicate payment is rejected
     assert client.post(f"/api/fines/{fine_id}/collect").status_code == 409
     # student was notified
@@ -477,8 +589,8 @@ def test_fine_waive_requires_admin_and_reason(api):
     assert client.post(f"/api/fines/{fine_id}/waive", json={"reason": "ok"}).status_code == 400
     waived = client.post(f"/api/fines/{fine_id}/waive", json={"reason": "barcode damaged, goodwill waiver"})
     assert waived.status_code == 200
-    assert waived.get_json()["data"]["fine"]["status"] == "waived"
-    assert waived.get_json()["data"]["fine"]["waived_by"] == "ADMIN001"
+    assert waived.json()["data"]["fine"]["status"] == "waived"
+    assert waived.json()["data"]["fine"]["waived_by"] == "ADMIN001"
     logs = controller.user_dao.get_all_activity_logs(limit=50)
     assert any(log["action"] == "FINE_WAIVED" for log in logs)
 
@@ -490,7 +602,7 @@ def test_admin_user_management(api):
     assert client.get("/api/users").status_code == 403  # staff but not admin
 
     login_as(client, "admin@library.com", "admin123")
-    users = client.get("/api/users?role=librarian").get_json()["data"]["users"]
+    users = client.get("/api/users?role=librarian").json()["data"]["users"]
     assert [u["role"] for u in users] == ["librarian"]
     assert client.put("/api/users/STAFF01/status", json={"status": "inactive"}).status_code == 200
     assert controller.get_user("STAFF01")["status"] == "inactive"
@@ -499,7 +611,7 @@ def test_admin_user_management(api):
 
     promoted = client.put("/api/users/STAFF01/role", json={"role": "admin"})
     assert promoted.status_code == 200
-    assert promoted.get_json()["data"]["user"]["role"] == "admin"
+    assert promoted.json()["data"]["user"]["role"] == "admin"
     # self role change blocked
     assert client.put("/api/users/ADMIN001/role", json={"role": "student"}).status_code == 409
     assert client.put("/api/users/STAFF01/role", json={"role": "bogus"}).status_code == 400
@@ -515,8 +627,11 @@ def test_system_settings_read_and_write(api):
     login_as(client, "admin@library.com", "admin123")
     saved = client.put("/api/settings", json={"fine_per_day": 12, "library_name": "Northstar Library"})
     assert saved.status_code == 200
-    assert saved.get_json()["data"]["fine_per_day"] == "12"
+    assert saved.json()["data"]["fine_per_day"] == "12"
     assert client.put("/api/settings", json={"loan_period_days": -3}).status_code == 400
+    # the Rs. 4000 book fee is administrator-editable
+    assert client.put("/api/settings", json={"book_fee": 3500}).status_code == 200
+    assert client.put("/api/settings", json={"book_fee": -1}).status_code == 400
 
 
 def test_setting_driven_fine_rate(api):
@@ -572,6 +687,6 @@ def test_book_sorting(api):
 
     login_as(client, "nina@library.com", "passw0rd1")
     titles_title = [b["title"] for b in
-                    client.get("/api/books?sort=title").get_json()["data"]["books"]]
+                    client.get("/api/books?sort=title").json()["data"]["books"]]
     assert titles_title == sorted(titles_title, key=str.lower)
     assert client.get("/api/books?sort=bogus").status_code == 400
