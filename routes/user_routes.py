@@ -1,86 +1,81 @@
 """Administrator user management and the system-wide activity log."""
-from flask import Blueprint, request
+from fastapi import APIRouter, Depends, Request
 
-from routes import (admin_required, current_user, fail, get_controller, json_body, ok)
+from routes import (admin_required, fail, get_controller, json_body, ok)
 
-user_bp = Blueprint("users", __name__, url_prefix="/api/users")
+router = APIRouter(prefix="/api/users")
 
 
-@user_bp.get("")
-@admin_required
-def list_users():
-    controller = get_controller()
-    role = request.args.get("role", "").strip().lower() or None
+@router.get("")
+async def list_users(request: Request, user: dict = Depends(admin_required)):
+    controller = get_controller(request)
+    role = request.query_params.get("role", "").strip().lower() or None
     if role not in (None, "student", "librarian", "admin"):
         return fail("Role must be 'student', 'librarian' or 'admin'.")
-    status = request.args.get("status", "").strip().lower() or None
-    search = request.args.get("q", "").strip() or None
+    status = request.query_params.get("status", "").strip().lower() or None
+    search = request.query_params.get("q", "").strip() or None
     users = controller.list_all_users(role=role, search=search, status=status)
     return ok(data={"users": users})
 
 
-@user_bp.put("/<user_id>/role")
-@admin_required
-def set_role(user_id):
-    controller = get_controller()
-    data = json_body()
+@router.put("/{user_id}/role")
+async def set_role(user_id: str, request: Request, user: dict = Depends(admin_required)):
+    controller = get_controller(request)
+    data = await json_body(request)
     role = str(data.get("role", "")).strip().lower()
     if role not in ("student", "librarian", "admin"):
         return fail("Role must be 'student', 'librarian' or 'admin'.")
-    success, message = controller.set_user_role(user_id, role, current_user()["user_id"])
+    success, message = controller.set_user_role(user_id, role, user["user_id"])
     if not success:
         return fail(message, 409)
     return ok(data={"user": controller.get_user(user_id)}, message=message)
 
 
-@user_bp.put("/<user_id>/status")
-@admin_required
-def set_status(user_id):
-    controller = get_controller()
-    user = controller.get_user(user_id)
-    if not user:
+@router.put("/{user_id}/status")
+async def set_status(user_id: str, request: Request, user: dict = Depends(admin_required)):
+    controller = get_controller(request)
+    account = controller.get_user(user_id)
+    if not account:
         return fail("User not found.", 404)
-    status = str(json_body().get("status", "")).strip().lower()
+    status = str((await json_body(request)).get("status", "")).strip().lower()
     if status not in ("active", "inactive"):
         return fail("Status must be 'active' or 'inactive'.")
-    if user_id == current_user()["user_id"]:
+    if user_id == user["user_id"]:
         return fail("You cannot change your own account status.", 409)
-    if user["status"] == status:
-        return ok(data={"user": user}, message=f"Account is already {status}.")
+    if account["status"] == status:
+        return ok(data={"user": account}, message=f"Account is already {status}.")
     _, message = controller.set_user_status(user_id, status)
     return ok(data={"user": controller.get_user(user_id)}, message=message)
 
 
-@user_bp.get("/<user_id>")
-@admin_required
-def get_user(user_id):
-    controller = get_controller()
-    user = controller.get_user(user_id)
-    if not user:
+@router.get("/{user_id}")
+async def get_user(user_id: str, request: Request, user: dict = Depends(admin_required)):
+    controller = get_controller(request)
+    account = controller.get_user(user_id)
+    if not account:
         return fail("User not found.", 404)
     payload = {
-        "user": user,
+        "user": account,
         "borrow_history": controller.borrow_dao.get_student_borrowed_books(user_id),
         "fines": controller.borrow_dao.get_student_fines(user_id),
     }
-    if user["role"] == "student":
+    if account["role"] == "student":
         payload["reservations"] = controller.reservation_dao.list_reservations(student_id=user_id)
     return ok(data=payload)
 
 
-activity_bp = Blueprint("activity", __name__, url_prefix="/api/activity-logs")
+activity_router = APIRouter(prefix="/api/activity-logs")
 
 
-@activity_bp.get("")
-@admin_required
-def activity_logs():
-    controller = get_controller()
+@activity_router.get("")
+async def activity_logs(request: Request, user: dict = Depends(admin_required)):
+    controller = get_controller(request)
     try:
-        limit = min(500, max(1, int(request.args.get("limit", 200))))
+        limit = min(500, max(1, int(request.query_params.get("limit", 200))))
     except ValueError:
         limit = 200
-    action = request.args.get("action", "").strip().upper() or None
-    search = request.args.get("q", "").strip().lower() or None
+    action = request.query_params.get("action", "").strip().upper() or None
+    search = request.query_params.get("q", "").strip().lower() or None
     logs = controller.user_dao.get_all_activity_logs(limit=limit)
     if action:
         logs = [log for log in logs if log.get("action") == action]
