@@ -127,6 +127,58 @@ class DatabaseConnection:
         );
         """)
 
+        # Book Fees — uploaded by the ADMIN only (Rs. 4000 default). Publishing to the
+        # student portal is automatic; only the admin can mark a fee paid, and borrowing
+        # is blocked while a fee is unpaid.
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS book_fees (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            student_id TEXT NOT NULL,
+            transaction_id INTEGER,
+            book_id INTEGER,
+            amount REAL NOT NULL,
+            status TEXT CHECK(status IN ('unpaid', 'paid')) DEFAULT 'unpaid',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            payment_date DATE,
+            collected_by TEXT,
+            uploaded_by TEXT,
+            FOREIGN KEY (student_id) REFERENCES users(user_id),
+            FOREIGN KEY (transaction_id) REFERENCES transactions(id),
+            FOREIGN KEY (book_id) REFERENCES books(id)
+        );
+        """)
+
+        # Migrate a pre-existing book_fees table that required a book/transaction and
+        # had no uploaded_by column (SQLite CHECK/NOT NULL constraints cannot be
+        # altered in place, so the table is rebuilt and the data preserved).
+        existing_book_fees = [row[1] for row in cursor.execute("PRAGMA table_info(book_fees)").fetchall()]
+        if existing_book_fees and "uploaded_by" not in existing_book_fees:
+            cursor.execute("""
+            CREATE TABLE book_fees_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                student_id TEXT NOT NULL,
+                transaction_id INTEGER,
+                book_id INTEGER,
+                amount REAL NOT NULL,
+                status TEXT CHECK(status IN ('unpaid', 'paid')) DEFAULT 'unpaid',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                payment_date DATE,
+                collected_by TEXT,
+                uploaded_by TEXT,
+                FOREIGN KEY (student_id) REFERENCES users(user_id),
+                FOREIGN KEY (transaction_id) REFERENCES transactions(id),
+                FOREIGN KEY (book_id) REFERENCES books(id)
+            );
+            """)
+            cursor.execute("""
+                INSERT INTO book_fees_new (id, student_id, transaction_id, book_id, amount,
+                                           status, created_at, payment_date, collected_by)
+                SELECT id, student_id, transaction_id, book_id, amount,
+                       status, created_at, payment_date, collected_by FROM book_fees
+            """)
+            cursor.execute("DROP TABLE book_fees")
+            cursor.execute("ALTER TABLE book_fees_new RENAME TO book_fees")
+
         # Migrate a pre-existing fines table that lacks the payment/waiver columns
         # and the 'waived' status (SQLite CHECK constraints cannot be altered in place).
         existing_fines = [row[1] for row in cursor.execute("PRAGMA table_info(fines)").fetchall()]
@@ -166,6 +218,7 @@ class DatabaseConnection:
             ("loan_period_days", "14"),
             ("fine_per_day", "10"),
             ("due_soon_days", "3"),
+            ("book_fee", os.environ.get("BOOK_FEE", "4000")),
         ):
             cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", (key, value))
 
@@ -222,10 +275,14 @@ class DatabaseConnection:
         self._add_column_if_missing(cursor, "books", "description", "TEXT DEFAULT ''")
         self._add_column_if_missing(cursor, "books", "status", "TEXT DEFAULT 'active'")
         self._add_column_if_missing(cursor, "books", "created_at", "TIMESTAMP")
+        self._add_column_if_missing(cursor, "books", "fee", "REAL")
         self._add_column_if_missing(cursor, "notifications", "title", "TEXT DEFAULT ''")
         self._add_column_if_missing(cursor, "notifications", "type", "TEXT")
         self._add_column_if_missing(cursor, "notifications", "ref_id", "INTEGER")
         self._add_column_if_missing(cursor, "fines", "collected_by", "TEXT")
+        # Every book carries the library book fee (Rs. 4000 unless overridden per title)
+        cursor.execute("UPDATE books SET fee = ? WHERE fee IS NULL",
+                       (os.environ.get("BOOK_FEE", "4000"),))
         # Backfill created_at for pre-existing book rows
         cursor.execute("UPDATE books SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL")
 
@@ -243,6 +300,8 @@ class DatabaseConnection:
             "CREATE INDEX IF NOT EXISTS idx_reservations_status ON reservations(status)",
             "CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, is_read)",
             "CREATE INDEX IF NOT EXISTS idx_fines_student ON fines(student_id)",
+            "CREATE INDEX IF NOT EXISTS idx_book_fees_student ON book_fees(student_id)",
+            "CREATE INDEX IF NOT EXISTS idx_book_fees_txn ON book_fees(transaction_id)",
             "CREATE INDEX IF NOT EXISTS idx_otps_user ON password_reset_otps(user_id)",
         ]
         for statement in indexes:
