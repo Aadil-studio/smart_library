@@ -1,17 +1,17 @@
 import os
 
-from flask import Blueprint, request, session
+from fastapi import APIRouter, Depends, Request
 
 from routes import (admin_required, current_user, fail, get_controller, json_body,
                     login_required, ok, password_problem, require_fields, valid_email)
 
-auth_bp = Blueprint("auth", __name__, url_prefix="/api/auth")
+router = APIRouter(prefix="/api/auth")
 
 
-@auth_bp.post("/register")
-def register():
-    controller = get_controller()
-    data = json_body()
+@router.post("/register")
+async def register(request: Request):
+    controller = get_controller(request)
+    data = await json_body(request)
     error = require_fields(data, "student_id", "full_name", "email", "password", "confirm_password")
     if error:
         return fail(error)
@@ -59,10 +59,10 @@ def register():
     return ok(data={"user": user}, message="Account created successfully. Please login.")
 
 
-@auth_bp.post("/login")
-def login():
-    controller = get_controller()
-    data = json_body()
+@router.post("/login")
+async def login(request: Request):
+    controller = get_controller(request)
+    data = await json_body(request)
     error = require_fields(data, "credential", "password")
     if error:
         return fail("Please enter your login credentials.")
@@ -78,30 +78,28 @@ def login():
             return fail(reason, 401)
         return fail("Invalid email or password.", 401)
 
-    session["user"] = user
-    session.permanent = bool(data.get("remember"))
+    request.session["user"] = user
     return ok(data={"user": user}, message=f"Welcome back, {user['name']}!")
 
 
-@auth_bp.post("/logout")
-@login_required
-def logout():
-    session.clear()
+@router.post("/logout")
+async def logout(request: Request, user: dict = Depends(login_required)):
+    request.session.clear()
     return ok(message="You have been signed out.")
 
 
-@auth_bp.get("/me")
-def me():
-    user = current_user()
+@router.get("/me")
+async def me(request: Request):
+    user = current_user(request)
     if not user:
         return fail("Not signed in.", 401)
     return ok(data={"user": user})
 
 
-@auth_bp.post("/forgot-password")
-def forgot_password():
-    controller = get_controller()
-    data = json_body()
+@router.post("/forgot-password")
+async def forgot_password(request: Request):
+    controller = get_controller(request)
+    data = await json_body(request)
     error = require_fields(data, "email")
     if error:
         return fail(error)
@@ -117,42 +115,68 @@ def forgot_password():
     from services.email_service import send_otp_email
     message = "If that email is registered, a verification code has been sent."
     response_data = None
-    if os.environ.get("SMTP_HOST"):
-        sent, send_message = send_otp_email(email, otp_or_msg)
+    if os.environ.get("SMTP_HOST") and os.environ.get("SMTP_USER"):
+        # Real delivery: the 6-digit code AND a reset link land in the user's Gmail inbox.
+        base_url = os.environ.get("APP_BASE_URL", "https://127.0.0.1:8000").rstrip("/")
+        reset_url = f"{base_url}/reset-password.html?email={email}"
+        sent, send_message = send_otp_email(email, otp_or_msg, reset_url)
         message = send_message if sent else "Email delivery failed. Please try again later."
     elif os.environ.get("OTP_DEV_MODE", "1") == "1":
-        # DEVELOPMENT ONLY: no SMTP server configured, so the code is returned for testing.
+        # DEVELOPMENT ONLY: no SMTP configured, so the code is returned for testing.
         response_data = {"dev_otp": otp_or_msg}
         message = "Development mode: use the verification code shown below."
     return ok(data=response_data, message=message)
 
 
-@auth_bp.post("/verify-otp")
-def verify_otp():
-    controller = get_controller()
-    data = json_body()
+@router.post("/verify-otp")
+async def verify_otp(request: Request):
+    """Step 1 of the reset: the user enters the code emailed to their Gmail.
+    On success a short-lived signed token is returned — only then is the
+    change-password step unlocked."""
+    controller = get_controller(request)
+    data = await json_body(request)
     error = require_fields(data, "email", "otp")
     if error:
         return fail(error)
-    ok_result, message = controller.user_dao.verify_otp(str(data["email"]).strip().lower(), str(data["otp"]).strip())
-    if not ok_result:
+    email = str(data["email"]).strip().lower()
+    verified, message, otp_hash = controller.user_dao.verify_otp(email, str(data["otp"]).strip())
+    if not verified:
         return fail(message)
-    return ok(message=message)
+
+    from itsdangerous import URLSafeTimedSerializer
+    signer = URLSafeTimedSerializer(request.app.state.secret_key, salt="password-reset")
+    token = signer.dumps({"email": email, "otp_hash": otp_hash})
+    return ok(data={"reset_token": token}, message=message)
 
 
-@auth_bp.post("/reset-password")
-def reset_password():
-    controller = get_controller()
-    data = json_body()
-    error = require_fields(data, "email", "otp", "new_password", "confirm_password")
+@router.post("/reset-password")
+async def reset_password(request: Request):
+    """Step 2 of the reset: allowed only with a token from a verified OTP
+    (or the raw code, verified again server-side)."""
+    controller = get_controller(request)
+    data = await json_body(request)
+    error = require_fields(data, "new_password", "confirm_password")
     if error:
+        return fail(error)
+    if not data.get("reset_token") and (error := require_fields(data, "email", "otp")):
         return fail(error)
     if data["new_password"] != data["confirm_password"]:
         return fail("Passwords do not match.")
     if problem := password_problem(data["new_password"]):
         return fail(problem)
-    success, message = controller.reset_password(
-        str(data["email"]).strip().lower(), str(data["otp"]).strip(), data["new_password"])
+
+    if data.get("reset_token"):
+        from itsdangerous import BadData, URLSafeTimedSerializer
+        signer = URLSafeTimedSerializer(request.app.state.secret_key, salt="password-reset")
+        try:
+            payload = signer.loads(str(data["reset_token"]), max_age=600)
+        except BadData:
+            return fail("Your verification has expired. Please enter the code again.")
+        success, message = controller.user_dao.reset_password_with_hash(
+            payload["email"], payload["otp_hash"], data["new_password"])
+    else:
+        success, message = controller.reset_password(
+            str(data["email"]).strip().lower(), str(data["otp"]).strip(), data["new_password"])
     if not success:
         return fail(message)
     return ok(message=message)
