@@ -1,18 +1,18 @@
-from flask import Blueprint, request
+from fastapi import APIRouter, Depends, Request
 
-from routes import (current_user, fail, get_controller, login_required, ok, staff_required)
+from routes import (current_user, fail, get_controller, json_body, login_required,
+                    ok, staff_required)
 
-student_bp = Blueprint("students", __name__, url_prefix="/api/students")
+router = APIRouter(prefix="/api/students")
 
 
-@student_bp.get("")
-@staff_required
-def list_students():
-    controller = get_controller()
+@router.get("")
+async def list_students(request: Request, user: dict = Depends(staff_required)):
+    controller = get_controller(request)
     students = controller.user_dao.get_users_by_role(
         "student",
-        search=request.args.get("q", "").strip() or None,
-        status=request.args.get("status", "").strip() or None,
+        search=request.query_params.get("q", "").strip() or None,
+        status=request.query_params.get("status", "").strip() or None,
     )
     # Enrich with per-member circulation stats for the member management table
     for student in students:
@@ -22,10 +22,9 @@ def list_students():
     return ok(data={"students": students})
 
 
-@student_bp.get("/<user_id>")
-@staff_required
-def get_student(user_id):
-    controller = get_controller()
+@router.get("/{user_id}")
+async def get_student(user_id: str, request: Request, user: dict = Depends(staff_required)):
+    controller = get_controller(request)
     student = controller.get_user(user_id)
     if not student or student["role"] != "student":
         return fail("Student not found.", 404)
@@ -35,17 +34,17 @@ def get_student(user_id):
         "active_loans": controller.borrow_dao.get_student_borrowed_books(user_id, active_only=True),
         "reservations": controller.reservation_dao.list_reservations(student_id=user_id),
         "fines": controller.borrow_dao.get_student_fines(user_id),
+        "fees": controller.list_fees(student_id=user_id),
     })
 
 
-@student_bp.put("/<user_id>/status")
-@staff_required
-def set_status(user_id):
-    controller = get_controller()
+@router.put("/{user_id}/status")
+async def set_status(user_id: str, request: Request, user: dict = Depends(staff_required)):
+    controller = get_controller(request)
     student = controller.get_user(user_id)
     if not student or student["role"] != "student":
         return fail("Student not found.", 404)
-    status = (request.get_json(silent=True) or {}).get("status")
+    status = (await json_body(request)).get("status")
     if status not in ("active", "inactive"):
         return fail("Status must be 'active' or 'inactive'.")
     if student["status"] == status:
@@ -54,11 +53,9 @@ def set_status(user_id):
     return ok(data={"student": controller.get_user(user_id)}, message=message)
 
 
-@student_bp.get("/<user_id>/history")
-@login_required
-def student_history(user_id):
-    user = current_user()
+@router.get("/{user_id}/history")
+async def student_history(user_id: str, request: Request, user: dict = Depends(login_required)):
     if user["role"] == "student" and user["user_id"] != user_id:
         return fail("You can only view your own history.", 403)
-    controller = get_controller()
+    controller = get_controller(request)
     return ok(data={"history": controller.borrow_dao.get_student_borrowed_books(user_id)})
