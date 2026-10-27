@@ -1,43 +1,40 @@
-from flask import Blueprint, request
+from fastapi import APIRouter, Depends, Request
 
 from routes import (admin_required, fail, get_controller, json_body, login_required,
-                    ok, parse_int, require_fields, staff_required)
+                    ok, parse_float, parse_int, require_fields, staff_required)
 
-book_bp = Blueprint("books", __name__, url_prefix="/api/books")
+router = APIRouter(prefix="/api/books")
 
 
-@book_bp.get("")
-@login_required
-def list_books():
-    controller = get_controller()
-    sort = request.args.get("sort", "").strip() or None
+@router.get("")
+async def list_books(request: Request, user: dict = Depends(login_required)):
+    controller = get_controller(request)
+    sort = request.query_params.get("sort", "").strip() or None
     if sort and sort not in ("newest", "oldest", "title", "title-desc", "author", "year", "availability"):
         return fail("Invalid sort option.")
     books = controller.filter_books(
-        search=request.args.get("q", "").strip() or None,
-        category=request.args.get("category", "").strip() or None,
-        author=request.args.get("author", "").strip() or None,
-        availability=request.args.get("availability", "").strip() or None,
+        search=request.query_params.get("q", "").strip() or None,
+        category=request.query_params.get("category", "").strip() or None,
+        author=request.query_params.get("author", "").strip() or None,
+        availability=request.query_params.get("availability", "").strip() or None,
         sort=sort,
     )
     return ok(data={"books": books, "categories": controller.get_categories(),
                     "authors": controller.get_authors()})
 
 
-@book_bp.get("/<int:book_id>")
-@login_required
-def get_book(book_id):
-    book = get_controller().get_book(book_id)
+@router.get("/{book_id}")
+async def get_book(book_id: int, request: Request, user: dict = Depends(login_required)):
+    book = get_controller(request).get_book(book_id)
     if not book:
         return fail("Book not found.", 404)
     return ok(data={"book": book})
 
 
-@book_bp.post("")
-@staff_required
-def add_book():
-    controller = get_controller()
-    data = json_body()
+@router.post("")
+async def add_book(request: Request, user: dict = Depends(staff_required)):
+    controller = get_controller(request)
+    data = await json_body(request)
     error = require_fields(data, "title", "author", "isbn")
     if error:
         return fail(error)
@@ -46,6 +43,9 @@ def add_book():
     if error:
         return fail(error)
     year, error = parse_int(data.get("publication_year", 2026), "publication_year", minimum=1000, maximum=2100)
+    if error:
+        return fail(error)
+    fee, error = parse_float(data, "fee", minimum=0, maximum=100000)
     if error:
         return fail(error)
 
@@ -60,6 +60,7 @@ def add_book():
         total_copies=copies,
         shelf_no=str(data.get("shelf_no", "") or "A1").strip() or "A1",
         description=str(data.get("description", "") or "").strip(),
+        fee=fee,
     )
     if not book_id:
         return fail("A book with this ISBN already exists.", 409)
@@ -67,13 +68,12 @@ def add_book():
     return ok(data={"book": book}, message=f"'{book['title']}' added to the catalog.")
 
 
-@book_bp.put("/<int:book_id>")
-@staff_required
-def update_book(book_id):
-    controller = get_controller()
+@router.put("/{book_id}")
+async def update_book(book_id: int, request: Request, user: dict = Depends(staff_required)):
+    controller = get_controller(request)
     if not controller.get_book(book_id):
         return fail("Book not found.", 404)
-    data = json_body()
+    data = await json_body(request)
     if "total_copies" in data:
         copies, error = parse_int(data.get("total_copies"), "total_copies", minimum=1, maximum=999)
         if error:
@@ -84,6 +84,11 @@ def update_book(book_id):
         if error:
             return fail(error)
         data["publication_year"] = year
+    if "fee" in data:
+        fee, error = parse_float(data, "fee", minimum=0, maximum=100000)
+        if error:
+            return fail(error)
+        data["fee"] = fee
     if "status" in data and data["status"] not in ("active", "inactive"):
         return fail("Status must be 'active' or 'inactive'.")
     success, message = controller.update_book(book_id, **data)
@@ -92,10 +97,9 @@ def update_book(book_id):
     return ok(data={"book": controller.get_book(book_id)}, message=message)
 
 
-@book_bp.delete("/<int:book_id>")
-@admin_required
-def delete_book(book_id):
-    success, message = get_controller().delete_book(book_id)
+@router.delete("/{book_id}")
+async def delete_book(book_id: int, request: Request, user: dict = Depends(admin_required)):
+    success, message = get_controller(request).delete_book(book_id)
     if not success:
         return fail(message, 409)
     return ok(message=message)
