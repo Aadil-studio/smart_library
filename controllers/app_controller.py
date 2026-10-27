@@ -75,9 +75,9 @@ class LibraryController:
 
     # --- Book Operations ---
     def register_book(self, title, author, isbn, category="General", publisher="", edition="",
-                      publication_year=2026, total_copies=1, shelf_no="A1", description=""):
+                      publication_year=2026, total_copies=1, shelf_no="A1", description="", fee=None):
         return self.book_dao.add_book(title, author, isbn, category, publisher, edition,
-                                      publication_year, total_copies, shelf_no, description)
+                                      publication_year, total_copies, shelf_no, description, fee)
 
     def list_books(self):
         return self.book_dao.get_all_books()
@@ -170,6 +170,40 @@ class LibraryController:
 
     def fine_summary(self):
         return self.borrow_dao.fine_summary()
+
+    # --- Book fees (uploaded by the ADMIN only; publishing to the student portal is
+    # automatic; only the admin grants "paid"; borrowing blocked while unpaid) ---
+    def create_fee(self, student_id, amount, book_id=None, transaction_id=None, uploaded_by=None):
+        return self.borrow_dao.create_fee(student_id, amount, book_id=book_id,
+                                          transaction_id=transaction_id, uploaded_by=uploaded_by)
+
+    def list_fees(self, student_id=None, status=None, search=None):
+        return self.borrow_dao.list_fees(student_id=student_id, status=status, search=search)
+
+    def get_fee(self, fee_id):
+        return self.borrow_dao.get_fee_by_id(fee_id)
+
+    def fee_summary(self):
+        return self.borrow_dao.fee_summary()
+
+    def collect_fee(self, fee_id, collector_id):
+        fee, error = self.borrow_dao.mark_fee_paid(fee_id, collector_id)
+        if error:
+            return False, error, None
+        self.notification_dao.notify(
+            fee["student_id"], "Book fee paid",
+            f"Your book fee payment of Rs. {float(fee['amount']):.2f} "
+            f"for '{fee['book_title'] or 'the library'}' has been recorded by the admin. "
+            f"You can now borrow books from the library.",
+            ntype="fee", ref_id=fee_id,
+        )
+        collector = self.get_user(collector_id)
+        self.user_dao.log_activity(
+            collector_id, collector["name"] if collector else collector_id,
+            "FEE_COLLECTED",
+            f"Collected book fee Rs. {float(fee['amount']):.2f} (fee #{fee_id}) from {fee['student_id']}.",
+        )
+        return True, "Book fee payment collected.", fee
 
     def fine_collection_trend(self, days=14):
         return self.borrow_dao.fine_collection_trend(days=days)
