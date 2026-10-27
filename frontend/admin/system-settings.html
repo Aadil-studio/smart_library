@@ -26,6 +26,7 @@
             <label>Library name<input id="library_name" required></label>
             <label>Loan period (days)<input id="loan_period_days" type="number" min="1" max="90" required></label>
             <label>Fine per day (Rs.)<input id="fine_per_day" type="number" min="0" max="1000" required></label>
+            <label>Book fee per issue (Rs.)<input id="book_fee" type="number" min="0" max="100000" required></label>
             <label>Due-soon reminder (days)<input id="due_soon_days" type="number" min="0" max="365" required></label>
             <button class="btn">Save settings</button>
           </form>
@@ -83,6 +84,7 @@
               library_name: document.getElementById("library_name").value,
               loan_period_days: Number(document.getElementById("loan_period_days").value),
               fine_per_day: Number(document.getElementById("fine_per_day").value),
+              book_fee: Number(document.getElementById("book_fee").value),
               due_soon_days: Number(document.getElementById("due_soon_days").value),
             }),
           });
