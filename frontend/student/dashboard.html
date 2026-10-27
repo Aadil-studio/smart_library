@@ -1,12 +1,1 @@
-<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0b1020"><title>Student dashboard | Northstar Library</title><link rel="stylesheet" href="../css/northstar.css"></head>
-<body data-page="dash" data-need="student" data-base="../" data-initial-view="{{ initial_view }}">
-<div id="toast"></div>
-<div id="app" class="app"><aside><div class="logo">Northstar <b>Library</b></div><div id="nav" style="display:contents"></div><div style="flex:1"></div><button class="nav" onclick="logout()">Sign out</button></aside>
-<main><div class="top"><h2 id="ptitle">Dashboard</h2><div class="top-meta"><span class="backend-badge"><i></i>{{ backend_status }}</span><div class="who"><span id="uname">{{ user['name'] }}</span><span class="role-label">{{ user['role'] }}</span><div class="av" id="uav">{{ user['name'][0]|upper }}</div></div></div></div>
-<div id="view"><div class="panel"><h3>Your live loans</h3><table><thead><tr><th>Book</th><th>Status</th><th>Due</th></tr></thead><tbody>
-{% for loan in transactions[:6] %}<tr><td>{{ loan['book_title'] }}</td><td>{{ loan['status'] }}</td><td>{{ loan['due_date'] }}</td></tr>{% else %}<tr><td colspan="3">You have no active loans.</td></tr>{% endfor %}
-</tbody></table><h3 class="template-section-title">Available titles</h3><table><thead><tr><th>Title</th><th>Author</th><th>Available</th></tr></thead><tbody>
-{% for book in books %}<tr><td>{{ book['title'] }}</td><td>{{ book['author'] }}</td><td>{{ book['available_copies'] }}</td></tr>{% else %}<tr><td colspan="3">No books are currently available.</td></tr>{% endfor %}
-</tbody></table></div></div></main></div>
-<script src="../js/northstar.js"></script></body></html>
+<!doctype html><html><head><meta charset="utf-8"><title>Redirecting…</title><meta http-equiv="refresh" content="0; url=admin/dashboard.html"><script>location.replace("admin/dashboard.html")</script></head><body><a href="admin/dashboard.html">Continue</a></body></html>
