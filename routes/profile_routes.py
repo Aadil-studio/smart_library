@@ -1,16 +1,14 @@
-from flask import Blueprint
+from fastapi import APIRouter, Depends, Request
 
-from routes import (current_user, fail, get_controller, json_body, login_required,
+from routes import (fail, get_controller, json_body, login_required,
                     ok, password_problem, require_fields)
 
-profile_bp = Blueprint("profile", __name__, url_prefix="/api/profile")
+router = APIRouter(prefix="/api/profile")
 
 
-@profile_bp.get("")
-@login_required
-def get_profile():
-    controller = get_controller()
-    user = current_user()
+@router.get("")
+async def get_profile(request: Request, user: dict = Depends(login_required)):
+    controller = get_controller(request)
     return ok(data={
         "profile": controller.get_user(user["user_id"]),
         "preferences": controller.get_preferences(user["user_id"]),
@@ -21,12 +19,10 @@ def get_profile():
     })
 
 
-@profile_bp.put("")
-@login_required
-def update_profile():
-    controller = get_controller()
-    user = current_user()
-    data = json_body()
+@router.put("")
+async def update_profile(request: Request, user: dict = Depends(login_required)):
+    controller = get_controller(request)
+    data = await json_body(request)
     if not str(data.get("name", "")).strip():
         return fail("'name' cannot be empty.")
     success, message = controller.update_profile(
@@ -39,17 +35,14 @@ def update_profile():
     if not success:
         return fail(message, 409)
     refreshed = controller.get_user(user["user_id"])
-    from flask import session
-    session["user"] = refreshed
+    request.session["user"] = refreshed
     return ok(data={"profile": refreshed}, message=message)
 
 
-@profile_bp.put("/password")
-@login_required
-def change_password():
-    controller = get_controller()
-    user = current_user()
-    data = json_body()
+@router.put("/password")
+async def change_password(request: Request, user: dict = Depends(login_required)):
+    controller = get_controller(request)
+    data = await json_body(request)
     error = require_fields(data, "current_password", "new_password", "confirm_password")
     if error:
         return fail(error)
@@ -65,12 +58,10 @@ def change_password():
     return ok(message=message)
 
 
-@profile_bp.put("/preferences")
-@login_required
-def update_preferences():
-    controller = get_controller()
-    user = current_user()
-    data = json_body()
+@router.put("/preferences")
+async def update_preferences(request: Request, user: dict = Depends(login_required)):
+    controller = get_controller(request)
+    data = await json_body(request)
     current = controller.get_preferences(user["user_id"])
     if "due_reminders" in data:
         current["due_reminders"] = bool(data["due_reminders"])
