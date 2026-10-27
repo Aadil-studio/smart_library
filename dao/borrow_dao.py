@@ -13,7 +13,7 @@ class BorrowDAO:
     # --- Issue ---
     def issue_book(self, student_id: str, book_id: int, days=14):
         cursor = self.db.cursor()
-        cursor.execute("SELECT available_copies, title, status FROM books WHERE id=?", (book_id,))
+        cursor.execute("SELECT available_copies, title, status, fee FROM books WHERE id=?", (book_id,))
         book = cursor.fetchone()
         if not book:
             return False, "Book not found.", None
@@ -253,6 +253,77 @@ class BorrowDAO:
             (fine_id,),
         ).fetchone()
         return dict(fine), None
+
+    # --- Book fees (uploaded by the ADMIN only; publishing to the student portal is
+    # automatic; only the admin marks a fee paid; borrowing is blocked while unpaid) ---
+    FEE_SELECT = """SELECT f.*, u.name AS student_name, b.title AS book_title,
+                           b.isbn AS book_isbn, b.author AS book_author
+                    FROM book_fees f
+                    JOIN users u ON u.user_id=f.student_id
+                    LEFT JOIN books b ON b.id=f.book_id"""
+
+    def create_fee(self, student_id: str, amount: float, book_id=None, transaction_id=None,
+                   uploaded_by=None):
+        """Upload a book fee for a member. Admin-only via the API layer."""
+        cursor = self.db.cursor()
+        cursor.execute(
+            """INSERT INTO book_fees (student_id, book_id, transaction_id, amount, status, uploaded_by)
+               VALUES (?, ?, ?, ?, 'unpaid', ?)""",
+            (student_id, book_id, transaction_id, float(amount), uploaded_by),
+        )
+        fee_id = cursor.lastrowid
+        self.db.commit()
+        return self.get_fee_by_id(fee_id)
+
+    def list_fees(self, student_id=None, status=None, search=None):
+        cursor = self.db.cursor()
+        clauses, params = [], []
+        if student_id:
+            clauses.append("f.student_id=?")
+            params.append(student_id)
+        if status:
+            clauses.append("f.status=?")
+            params.append(status)
+        if search:
+            query = f"%{search}%"
+            clauses.append("(CAST(f.id AS TEXT) LIKE ? OR u.name LIKE ? OR f.student_id LIKE ? OR b.title LIKE ?)")
+            params.extend([query, query, query, query])
+        sql = self.FEE_SELECT
+        if clauses:
+            sql += " WHERE " + " AND ".join(clauses)
+        sql += " ORDER BY f.id DESC"
+        return [dict(row) for row in cursor.execute(sql, params).fetchall()]
+
+    def get_fee_by_id(self, fee_id):
+        cursor = self.db.cursor()
+        row = cursor.execute(self.FEE_SELECT + " WHERE f.id=?", (fee_id,)).fetchone()
+        return dict(row) if row else None
+
+    def mark_fee_paid(self, fee_id, collector_id):
+        cursor = self.db.cursor()
+        cursor.execute(
+            """UPDATE book_fees SET status='paid', payment_date=DATE('now'), collected_by=?
+               WHERE id=? AND status='unpaid'""",
+            (collector_id, fee_id),
+        )
+        if cursor.rowcount == 0:
+            exists = cursor.execute("SELECT 1 FROM book_fees WHERE id=?", (fee_id,)).fetchone()
+            return None, "Fee has already been paid." if exists else "Fee not found."
+        self.db.commit()
+        return self.get_fee_by_id(fee_id), None
+
+    def fee_summary(self):
+        cursor = self.db.cursor()
+        rows = cursor.execute(
+            "SELECT status, COUNT(*) AS count, COALESCE(SUM(amount), 0) AS total FROM book_fees GROUP BY status"
+        ).fetchall()
+        by_status = {row["status"]: {"count": row["count"], "total": row["total"]} for row in rows}
+        return {
+            "outstanding": by_status.get("unpaid", {}).get("total", 0),
+            "outstanding_count": by_status.get("unpaid", {}).get("count", 0),
+            "collected": by_status.get("paid", {}).get("total", 0),
+            "collected_count": by_status.get("paid", {}).get("count", 0),
+        }
 
     def fine_summary(self):
         cursor = self.db.cursor()
