@@ -31,6 +31,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from config.database import DatabaseConnection
 from controllers.app_controller import LibraryController
+from routes import current_user
 from routes.auth_routes import router as auth_router
 from routes.book_routes import router as book_router
 from routes.borrow_routes import router as borrow_router
@@ -116,7 +117,7 @@ def load_env_file():
 
 
 def debug_enabled() -> bool:
-    return os.environ.get("APP_DEBUG", os.environ.get("FLASK_DEBUG", "1")) == "1"
+    return os.environ.get("APP_DEBUG", os.environ.get("FLASK_DEBUG", "0")) == "1"
 
 
 def seed_default_admin(controller: LibraryController):
@@ -164,7 +165,7 @@ def create_app() -> FastAPI:
         max_age=86400 * int(os.environ.get("REMEMBER_ME_DAYS", "30")),
         same_site="lax",
         # SESSION_COOKIE_SECURE=1 is set above because the server runs HTTPS
-        https_only=os.environ.get("SESSION_COOKIE_SECURE", "0") == "1",
+        https_only=os.environ.get("SESSION_COOKIE_SECURE", "1") == "1",
     )
 
     for router in (auth_router, book_router, student_router, borrow_router, fine_router,
@@ -212,7 +213,7 @@ def create_app() -> FastAPI:
     templates = app.state.templates
 
     def render_dashboard(request: Request, initial_view="dash"):
-        user = request.session.get("user")
+        user = current_user(request)
         if not user:
             return RedirectResponse("/login", status_code=302)
 
@@ -243,11 +244,19 @@ def create_app() -> FastAPI:
 
     # --- Page routes ---
     @app.get("/")
-    async def index():
-        return FileResponse(os.path.join(frontend_dir, "index.html"))
+    async def index(request: Request):
+        user = current_user(request)
+        if not user:
+            return RedirectResponse("/login.html", status_code=302)
+        destination = {
+            "student": "/student/dashboard.html",
+            "librarian": "/admin/dashboard.html",
+            "admin": "/admin/dashboard.html",
+        }.get(user.get("role"))
+        return RedirectResponse(destination or "/login.html", status_code=302)
 
     def _dashboard_page_response(request: Request, page_name, allowed_role=None):
-        user = request.session.get("user")
+        user = current_user(request)
         if not user:
             return RedirectResponse("/login.html", status_code=302)
         if allowed_role and user.get("role") != allowed_role:
@@ -266,7 +275,7 @@ def create_app() -> FastAPI:
     def _role_page_response(request: Request, area, page_name, allowed_roles):
         if not page_name.endswith(".html") or not SAFE_PAGE_NAME.match(page_name):
             return RedirectResponse("/", status_code=302)
-        user = request.session.get("user")
+        user = current_user(request)
         if not user:
             return RedirectResponse("/login.html", status_code=302)
         if area == "admin" and page_name in ADMIN_ONLY_PAGES and user.get("role") != "admin":
@@ -308,8 +317,9 @@ def create_app() -> FastAPI:
     @app.get("/login.html")
     @app.get("/login")
     async def login_page(request: Request):
-        if request.session.get("user"):
-            role = request.session["user"].get("role")
+        user = current_user(request)
+        if user:
+            role = user.get("role")
             return RedirectResponse(
                 {"student": "/student/dashboard.html", "librarian": "/admin/dashboard.html",
                  "admin": "/admin/dashboard.html"}.get(role, "/login.html"), status_code=302)
@@ -344,7 +354,7 @@ def create_app() -> FastAPI:
 
     @app.get("/books")
     async def books_page(request: Request):
-        user = request.session.get("user")
+        user = current_user(request)
         initial_view = "browse" if user and user["role"] == "student" else "books"
         return render_dashboard(request, initial_view)
 

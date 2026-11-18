@@ -75,9 +75,10 @@ class LibraryController:
 
     # --- Book Operations ---
     def register_book(self, title, author, isbn, category="General", publisher="", edition="",
-                      publication_year=2026, total_copies=1, shelf_no="A1", description="", fee=None):
+                      publication_year=2026, total_copies=1, shelf_no="A1", description="", fee=None,
+                      cover_url=None):
         return self.book_dao.add_book(title, author, isbn, category, publisher, edition,
-                                      publication_year, total_copies, shelf_no, description, fee)
+                                      publication_year, total_copies, shelf_no, description, fee, cover_url)
 
     def list_books(self):
         return self.book_dao.get_all_books()

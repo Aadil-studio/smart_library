@@ -2,8 +2,12 @@ __pycache__/
 *.pyc
 .pytest_cache/
 .venv/
+.venv-*/
 .env
 library.db
 library.db-shm
 library.db-wal
+localhost-cert.pem
+localhost-key.pem
 report.html
+server.log

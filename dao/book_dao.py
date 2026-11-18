@@ -10,7 +10,8 @@ class BookDAO:
         self.db = DatabaseConnection().get_connection()
 
     def add_book(self, title: str, author: str, isbn: str, category="General", publisher="", edition="",
-                 publication_year=2026, total_copies=1, shelf_no="A1", description="", fee=None):
+                 publication_year=2026, total_copies=1, shelf_no="A1", description="", fee=None,
+                 cover_url=None):
         cursor = self.db.cursor()
         if fee is None:
             # Every book carries the library book fee (Rs. 4000 by default)
@@ -20,10 +21,10 @@ class BookDAO:
             cursor.execute(
                 """INSERT INTO books (title, author, isbn, category, publisher, edition, publication_year,
                                       total_copies, available_copies, shelf_no, is_available, description,
-                                      status, created_at, fee)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, 'active', CURRENT_TIMESTAMP, ?)""",
+                                      status, created_at, fee, cover_url)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, 'active', CURRENT_TIMESTAMP, ?, ?)""",
                 (title, author, isbn, category, publisher, edition, publication_year, total_copies,
-                 total_copies, shelf_no, description, fee)
+                 total_copies, shelf_no, description, fee, cover_url)
             )
             self.db.commit()
             return cursor.lastrowid
@@ -110,7 +111,7 @@ class BookDAO:
             return False, "Book not found."
 
         allowed = ("title", "author", "isbn", "category", "publisher", "edition",
-                   "publication_year", "shelf_no", "description", "status", "fee")
+                   "publication_year", "shelf_no", "description", "status", "fee", "cover_url")
         updates, params = [], []
         for column in allowed:
             if fields.get(column) is not None:
@@ -135,6 +136,28 @@ class BookDAO:
         except sqlite3.IntegrityError:
             return False, "Another book already uses that ISBN."
         return True, "Book updated successfully."
+
+    def set_cover_if_missing(self, book_id, cover_url):
+        cursor = self.db.cursor()
+        cursor.execute(
+            """UPDATE books SET cover_url=?
+               WHERE id=? AND (cover_url IS NULL OR TRIM(cover_url)='')""",
+            (cover_url, book_id),
+        )
+        self.db.commit()
+        return cursor.rowcount == 1
+
+    def replace_cover_if_failed(self, book_id, cover_url, failed_urls):
+        if not failed_urls:
+            return False
+        placeholders = ", ".join("?" for _ in failed_urls)
+        cursor = self.db.cursor()
+        cursor.execute(
+            f"UPDATE books SET cover_url=? WHERE id=? AND cover_url IN ({placeholders})",
+            (cover_url, book_id, *failed_urls),
+        )
+        self.db.commit()
+        return cursor.rowcount == 1
 
     def delete_book(self, book_id):
         cursor = self.db.cursor()

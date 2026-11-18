@@ -1,13 +1,13 @@
-# Smart Library Management System
+# Northstar Library Management System
 
 A complete, production-style library management system for a university/library built with
-**Python (Flask)**, **SQLite**, and a modern **HTML5/CSS3/JavaScript** frontend — no frontend
+**Python (FastAPI)**, **SQLite**, and a modern **HTML5/CSS3/JavaScript** frontend — no frontend
 build step required. The frontend and backend communicate through a real REST API with
 session authentication and backend-enforced role authorization.
 
 ## 1. Project Overview
 
-Smart Library manages the full circulation workflow of a campus library:
+Northstar Library manages the full circulation workflow of a campus library:
 
 - **Students** browse and search the catalog, reserve books, track loans, fines, and
   notifications, and manage their profile and preferences.
@@ -22,7 +22,7 @@ and a **Strategy** pattern fine engine.
 
 | Area | What's included |
 | --- | --- |
-| Authentication | Register, login (student ID *or* email), logout, session cookies, Remember Me, show/hide password |
+| Authentication | Register, login (student ID *or* email), logout, secure session cookies, show/hide password |
 | Password security | Werkzeug PBKDF2/scrypt hashing; legacy SHA-256 hashes are upgraded automatically on login |
 | Forgot password | Email → OTP (hashed, 10-minute expiry, single use) → verify → reset. Dev mode shows the code; SMTP supported |
 | Roles | `student`, `librarian`, `admin` — enforced on the **backend** for every API call |
@@ -37,7 +37,7 @@ and a **Strategy** pattern fine engine.
 
 ## 3. Technologies
 
-- **Backend:** Python 3, Flask 3, SQLite 3 (WAL mode), Werkzeug security helpers
+- **Backend:** Python 3, FastAPI, SQLite 3 (WAL mode), Werkzeug security helpers
 - **Frontend:** HTML5, CSS3, vanilla JavaScript, Font Awesome (CDN)
 - **Testing:** PyTest (unit + end-to-end API tests)
 - **No other runtime dependencies** — see `requirements.txt`
@@ -46,44 +46,22 @@ and a **Strategy** pattern fine engine.
 
 ```
 smart_library/
-├── app.py                     # Flask app: /api/* REST API + serves ./frontend
-├── main.py                    # Original CLI demo (layered architecture demo)
-├── seed_demo.py               # Optional development seed data (DEVELOPMENT ONLY)
-├── generate_pdf.py            # Live HTML report -> report.html (print to PDF)
+├── main.py                    # FastAPI app: /api/* REST API + serves ./frontend
+├── seed_demo.py               # Optional development-only sample data
+├── seed_northstar.py          # Optional Northstar catalog seed
 ├── requirements.txt
-├── .env.example               # Environment variable template
-├── library.db                 # SQLite database (created/migrated automatically)
-│
-├── config/database.py         # Singleton SQLite connection + schema (WAL mode)
-├── controllers/app_controller.py   # Business facade used by all routes
-├── models/models.py           # Original entity classes
-├── dao/                       # Data access layer
-│   ├── user_dao.py            #   users, auth, OTPs, preferences, activity log
-│   ├── book_dao.py            #   books CRUD + search/filters
-│   ├── borrow_dao.py          #   transactions: issue/return/fines/overdue
-│   ├── reservation_dao.py     #   reservations
-│   └── notification_dao.py    #   notifications (+ de-duplication)
-├── services/
-│   ├── fine_strategy.py       # Strategy pattern fine engine (student/faculty)
-│   ├── borrow_service.py      # Loan workflows (original service)
-│   ├── report_service.py      # Aggregated statistics
-│   └── email_service.py       # SMTP OTP delivery (optional)
-├── routes/                    # Flask blueprints = REST API
-│   ├── __init__.py            #   role decorators + validation helpers
-│   ├── auth_routes.py  book_routes.py  student_routes.py  borrow_routes.py
-│   ├── reservation_routes.py  notification_routes.py
-│   └── report_routes.py  dashboard_routes.py  profile_routes.py
-├── frontend/                  # Static frontend (served by Flask)
-│   ├── index.html  login.html  signup.html  forgot-password.html  otp.html  reset-password.html
-│   ├── student/               # dashboard, books, borrowed-books, reservations,
-│   │                          # history, notifications, profile, settings
-│   ├── admin/                 # dashboard, books, add-book, edit-book, students,
-│   │                          # borrow-return, reservations, reports, notifications, settings
-│   ├── css/style.css          # Design system (glassmorphism dark theme)
-│   └── js/                    # api.js, common.js (shared shell), auth.js,
-│                              # student.js, admin.js, books.js, borrow.js,
-│                              # reservations.js, notifications.js
-└── tests/                     # PyTest suite (unit + end-to-end API)
+├── .env.example               # Safe environment-variable template
+├── config/                    # SQLite schema and connection
+├── controllers/               # Application/business facade
+├── dao/                       # Database access and domain persistence
+├── routes/                    # FastAPI routers and API authorization
+├── services/                  # Email, fines, circulation, and reports
+├── frontend/                  # Static HTML, CSS, and JavaScript
+│   ├── admin/                  # Admin and librarian pages
+│   ├── student/                # Student pages
+│   ├── css/
+│   └── js/
+└── tests/                     # PyTest unit and API regression suite
 ```
 
 ## 5. Installation (Windows)
@@ -126,48 +104,35 @@ copy .env.example .env
 
 | Variable | Purpose |
 | --- | --- |
-| `SECRET_KEY` | Flask session signing key — set a long random string |
-| `HOST` / `PORT` / `FLASK_DEBUG` | Server options (defaults: 127.0.0.1:5000, debug on) |
-| `REMEMBER_ME_DAYS` | "Remember me" session lifetime |
-| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | First admin account, created only if no admin exists (**DEVELOPMENT ONLY** defaults `admin@library.com` / `admin123`) |
-| `OTP_DEV_MODE` | `1` returns password-reset OTPs in the API response (no SMTP needed). Set `0` in production |
+| `SECRET_KEY` | Random session-signing key; required when debug mode is off |
+| `HOST` / `PORT` / `APP_DEBUG` | Server options (defaults: 127.0.0.1:8000, debug off) |
+| `SESSION_COOKIE_SECURE` | Defaults to `1`; keep enabled when serving over HTTPS |
+| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | First admin account, used only when the database has no admin |
+| `OTP_DEV_MODE` | Defaults to `0`; only `1` returns password-reset OTPs in the API response |
 | `SMTP_HOST`/`SMTP_PORT`/`SMTP_FROM`/`SMTP_USER`/`SMTP_PASS` | Email real OTP codes instead of dev mode |
+| `APP_BASE_URL` | Public HTTPS URL used to build password-reset email links |
 | `LIBRARY_DB_PATH` | Override the database file location |
 
-Never commit a real `.env` (it is already in `.gitignore`).
+Set `SECRET_KEY` to a new random value. Configure `ADMIN_EMAIL` and `ADMIN_PASSWORD`
+before the first start of an empty database. Never commit a real `.env`.
 
 ## 8. Running the Application
 
 ```bat
 .venv\Scripts\activate
-python seed_demo.py
-python seed_northstar.py
-python app.py
+python main.py
 ```
 
-The development server runs over HTTPS with a temporary ad-hoc certificate. Open
-**https://127.0.0.1:5000** and accept the browser's local-certificate warning — the backend
-and frontend run in this single process, so there is no separate frontend server to start.
-Session cookies are marked `Secure`; use the HTTPS URL for sign-in and other authenticated
-pages.
+The app serves the frontend and API together over HTTPS at **https://127.0.0.1:8000**.
+It generates a self-signed local certificate on first start; accept the browser's
+development-certificate warning. Session cookies are `Secure` by default.
 
 ## 9. Demo Accounts
 
-Created by `seed_demo.py` (or the first admin automatically on first run).
-**All demo passwords are DEVELOPMENT ONLY — change them for anything real** (Profile →
-Settings → Change password, or the `ADMIN_EMAIL`/`ADMIN_PASSWORD` variables).
-
-| Role | Email | Student/Role ID | Password |
-| --- | --- | --- | --- |
-| Admin | `admin@library.com` | `ADMIN001` | `admin123` |
-| Student | `student@smartlibrary.local` | `STU-1001` | `Student@123` |
-| Student | `sara.khan@smartlibrary.local` | `STU-1002` | `Student@123` |
-| Librarian | `librarian@smartlibrary.local` | `LIB-2001` | `Librarian@123` |
-
-You can sign in with **either** the email or the Student/Role ID.
-The Northstar sign-in shortcuts prefill the seeded account IDs; enter the password
-shown above. The administrator defaults to `admin@library.com` / `admin123` when the
-app creates the first admin account.
+`seed_demo.py` creates development-only sample accounts with well-known test credentials.
+Do not run it against a production database. Configure `ADMIN_EMAIL` and `ADMIN_PASSWORD`
+to create an administrator when starting with an empty database; no default production
+administrator credentials are provided.
 
 ## 10. API Overview
 
@@ -178,7 +143,7 @@ Authentication uses the session cookie; roles are enforced server-side.
 | Method | Endpoint | Access | Description |
 | --- | --- | --- | --- |
 | POST | `/api/auth/register` | public | Create a student account (validates email, unique ID/email, password policy) |
-| POST | `/api/auth/login` | public | Login with email **or** student ID (`remember` extends the session) |
+| POST | `/api/auth/login` | public | Login with email **or** student ID |
 | POST | `/api/auth/logout` | auth | Destroy the session |
 | GET | `/api/auth/me` | any | Current session user |
 | POST | `/api/auth/forgot-password` | public | Generate a hashed, expiring OTP (dev mode returns `data.dev_otp`) |
@@ -190,6 +155,7 @@ Authentication uses the session cookie; roles are enforced server-side.
 | --- | --- | --- |
 | GET | `/api/books?q=&category=&availability=&author=` | any signed-in user |
 | GET | `/api/books/<id>` | any signed-in user |
+| GET | `/api/books/cover-lookup?book_id=<id>` | any signed-in user (checks Google Books/Open Library ISBN-first, verifies title/author and image data, saves missing covers, and replaces a saved URL only after it fails) |
 | POST | `/api/books` | staff |
 | PUT | `/api/books/<id>` | staff |
 | DELETE | `/api/books/<id>` | admin (blocked while copies are on loan) |
@@ -235,15 +201,12 @@ Authentication uses the session cookie; roles are enforced server-side.
 
 ## 11. How the Frontend Connects to the Backend
 
-1. `frontend/js/api.js` wraps `fetch` for every request (`credentials: 'same-origin'`),
-   normalizes errors, and redirects to the login page on session expiry.
-2. `frontend/js/common.js` guards each page (`requireAuth`) by calling `/api/auth/me`,
-   then renders the shared sidebar/topbar (role-aware navigation, unread badge, search).
-3. Page modules (`books.js`, `borrow.js`, `reservations.js`, `notifications.js`,
-   `student.js`, `admin.js`) fetch live data from the API and render tables/cards;
-   every form posts to a real endpoint. There is no hard-coded demo data.
-4. Access control is server-side: a student calling a staff API receives `403`, and an
-   unauthenticated call receives `401` — changing frontend URLs grants nothing.
+1. `frontend/js/northstar.js` drives the shared catalog, student views, navigation, and
+   role-aware application interactions through the live API.
+2. `frontend/js/admin-dashboard.js` provides distinct admin analytics and librarian
+   operations; `frontend/js/book-covers.js` handles verified, lazy-loaded book covers.
+3. API routes enforce access control server-side: a student calling a staff API receives
+   `403`, and an unauthenticated call receives `401` — changing frontend URLs grants nothing.
 
 ## 12. Testing
 
@@ -268,12 +231,12 @@ dashboards and reports — all against an isolated in-memory database.
 
 | Problem | Fix |
 | --- | --- |
-| `Cannot reach the library server` toast | The Flask process isn't running — start it with `python app.py` |
+| `Cannot reach the library server` toast | Start the FastAPI process with `python main.py` |
 | Redirected to login immediately | Your session expired; sign in again |
 | `database is locked` | The app already enables WAL + busy timeout; close other processes using `library.db` |
 | OTP email not arriving | SMTP isn't configured; with `OTP_DEV_MODE=1` the code is shown on the OTP page instead |
-| Forgot the admin password | Delete the admin row (or the database) and restart — the app re-seeds from `ADMIN_EMAIL`/`ADMIN_PASSWORD` |
-| Port 5000 already in use | Change `PORT` in `.env` and restart |
+| Forgot the admin password | Use the configured password-reset email flow; preserve the database and contact the system administrator if SMTP is unavailable |
+| Port 8000 already in use | Change `PORT` in `.env` and restart |
 | Tests fail on first run | Ensure the venv is activated and `pip install -r requirements.txt` succeeded |
 
 ## 15. Security Notes

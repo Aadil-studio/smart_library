@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
+import secrets
 from datetime import datetime, timedelta
 
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -172,8 +174,7 @@ class UserDAO:
         user = cursor.fetchone()
         if not user:
             return None, "No account found with that email address."
-        import random
-        otp = str(random.randint(100000, 999999))
+        otp = str(secrets.randbelow(900000) + 100000)
         expires_at = (datetime.now() + timedelta(minutes=OTP_MINUTES_VALID)).strftime("%Y-%m-%d %H:%M:%S")
         # Invalidate any previous unused codes, then store only a hash of the new one
         cursor.execute("UPDATE password_reset_otps SET used=1 WHERE user_id=? AND used=0", (user["user_id"],))
@@ -201,7 +202,7 @@ class UserDAO:
         record = cursor.fetchone()
         if not record:
             return False, "No active verification code. Please request a new one.", None
-        if record["otp_hash"] != hashlib.sha256(str(otp).encode()).hexdigest():
+        if not hmac.compare_digest(record["otp_hash"], hashlib.sha256(str(otp).encode()).hexdigest()):
             return False, "That verification code is incorrect.", None
         if datetime.now() > datetime.strptime(record["expires_at"], "%Y-%m-%d %H:%M:%S"):
             return False, "That verification code has expired. Please request a new one.", None

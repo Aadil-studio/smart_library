@@ -30,6 +30,7 @@ const decorationBooks = [
 let books = [];
 let loans = [];
 let users = [];
+let studentFines = { fines: 0, fees: 0 };
 let me = null;
 let view = "dash";
 let q = "";
@@ -89,6 +90,7 @@ function rolePath(role) {
 
 function go(viewName) {
   view = viewName;
+  toggleStudentNav(false);
   draw();
 }
 
@@ -98,6 +100,10 @@ function setCat(category) {
 }
 
 function cover(book) {
+  return window.NorthstarBookCovers.markup(book);
+}
+
+function decorativeCover(book) {
   const color = hue(book.title);
   return `<div class="cover" style="background:linear-gradient(155deg,hsl(${color} 62% 44%),hsl(${(color + 55) % 360} 62% 20%))"><b>${esc(book.title)}</b><svg viewBox="0 0 100 100" aria-hidden="true">${ART[book.category] || ART.Fiction}</svg><span>${esc(book.author)}</span></div>`;
 }
@@ -107,7 +113,7 @@ function renderDecoration() {
     $("float").innerHTML = decorationBooks
       .map(
         (book, index) =>
-          `<div style="position:absolute;width:120px;left:${60 + index * 8}%;top:${8 + index * 18}%;transform:rotate(${index % 2 ? 5 : -6}deg)">${cover(book)}</div>`,
+          `<div style="position:absolute;width:120px;left:${60 + index * 8}%;top:${8 + index * 18}%;transform:rotate(${index % 2 ? 5 : -6}deg)">${decorativeCover(book)}</div>`,
       )
       .join("");
   }
@@ -132,6 +138,8 @@ async function refreshCatalog() {
     totalCopies: book.total_copies,
     availableCopies: book.available_copies,
     isbn: book.isbn,
+    createdAt: book.created_at,
+    coverUrl: book.cover_url || "",
   }));
 }
 
@@ -158,7 +166,18 @@ async function refreshMembers() {
 }
 
 async function refreshData() {
-  await Promise.all([refreshCatalog(), refreshLoans()]);
+  const tasks = [refreshCatalog(), refreshLoans()];
+  if (me.role === "student") {
+    tasks.push(
+      api("/borrow/fines").then((result) => {
+        studentFines = {
+          fines: Number(result.data.unpaid_total) || 0,
+          fees: Number(result.data.fees_unpaid_total) || 0,
+        };
+      }),
+    );
+  }
+  await Promise.all(tasks);
   if (me.role === "admin") await refreshMembers();
 }
 
@@ -181,25 +200,77 @@ const NAV = {
   ],
 };
 
+function navIcon(name) {
+  const paths = {
+    dash: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/>',
+    browse: '<path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v17H6.5A2.5 2.5 0 0 1 4 17.5z"/><path d="M4 17.5A2.5 2.5 0 0 1 6.5 15H20M8 7h8"/>',
+    loans: '<path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v17H6.5A2.5 2.5 0 0 1 4 17.5z"/><path d="M4 17.5A2.5 2.5 0 0 1 6.5 15H20M8 7h7M8 10h6"/>',
+    books: '<path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v17H6.5A2.5 2.5 0 0 1 4 17.5z"/><path d="M4 17.5A2.5 2.5 0 0 1 6.5 15H20"/>',
+    users: '<path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="10" cy="7" r="4"/><path d="M20 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
+    fines: '<circle cx="12" cy="12" r="9"/><path d="M16 8.5c-.7-.7-1.6-1-2.7-1-1.4 0-2.3.7-2.3 1.8 0 2.8 5.4 1.1 5.4 4.2 0 1.4-1.2 2.5-3 2.5-1.2 0-2.2-.4-3-1.2M12 5.5v13"/>',
+  };
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.dash}</svg>`;
+}
+
 function bookAvailable(book) {
   return Number(book.availableCopies) || 0;
 }
 
 function stats() {
+  if (me && me.role === "student") {
+    const mine = active(me.user_id);
+    const overdue = mine.filter((loan) => loan.status === "overdue" || dateValue(loan.dueDate) < new Date()).length;
+    const amount = studentFines.fines + studentFines.fees;
+    return `<div class="stats student-stats">
+      <article class="stat"><span class="stat-icon stat-icon-blue" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v17H6.5A2.5 2.5 0 0 1 4 17.5z"/><path d="M4 17.5A2.5 2.5 0 0 1 6.5 15H20M8 7h8"/></svg></span><small>Total borrowed</small><strong>${loans.length}</strong><span class="stat-caption">Books borrowed to date</span></article>
+      <article class="stat"><span class="stat-icon stat-icon-violet" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span><small>Active loans</small><strong>${mine.length}</strong><span class="stat-caption">Currently checked out</span></article>
+      <article class="stat"><span class="stat-icon stat-icon-amber" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3 2.8 19h18.4L12 3z"/><path d="M12 9v4M12 16h.01"/></svg></span><small>Overdue books</small><strong>${overdue}</strong><span class="stat-caption">${overdue ? "Please return them soon" : "All due dates are on track"}</span></article>
+      <article class="stat"><span class="stat-icon stat-icon-rose" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="14" rx="2"/><path d="M3 10h18M7 6V4h12v2M16 15h2"/></svg></span><small>Outstanding fines</small><strong class="stat-currency">Rs. ${amount.toFixed(2)}</strong><span class="stat-caption">Unpaid fines and book fees</span></article>
+    </div>`;
+  }
   const overdue = active().filter((loan) => dateValue(loan.dueDate) < new Date()).length;
   return `<div class="stats"><div class="stat"><small>Total titles</small><strong>${books.length}</strong></div><div class="stat"><small>Copies available</small><strong>${books.reduce((sum, book) => sum + bookAvailable(book), 0)}</strong></div><div class="stat"><small>Books on loan</small><strong>${active().length}</strong></div><div class="stat"><small>Overdue</small><strong>${overdue}</strong></div></div>`;
 }
 
+function renderBookCard(book) {
+  const available = bookAvailable(book);
+  return `<article class="book">
+    <button class="cover-button" type="button" aria-label="View details for ${esc(book.title)}" data-book-details="${Number(book.id)}">${cover(book)}</button>
+    <h3 title="${esc(book.title)}">${esc(book.title)}</h3>
+    <small class="book-author">${esc(book.author)}</small>
+    <div class="book-meta"><span class="tag">${esc(book.category)}</span><span class="${available ? "availability" : "availability unavailable"}">${available ? `${available} available` : "Unavailable"}</span></div>
+    <div class="book-card-actions"><button class="btn sm g" data-book-details="${Number(book.id)}">View details</button><button class="btn sm" onclick="borrow(${Number(book.id)})" ${available < 1 ? "disabled" : ""}>${available ? "Borrow book" : "Unavailable"}</button></div>
+  </article>`;
+}
+
+function showBookDetails(bookId) {
+  const book = books.find((item) => Number(item.id) === Number(bookId));
+  if (!book) return;
+  const available = bookAvailable(book);
+  $("book-details-content").innerHTML = `<div class="book-details-content"><div class="book-details-cover">${cover(book)}</div><div class="book-details-copy"><span class="section-kicker">LIBRARY CATALOG</span><h2 id="book-details-title">${esc(book.title)}</h2><p class="details-author">by ${esc(book.author)}</p><div class="book-meta"><span class="tag">${esc(book.category)}</span><span class="${available ? "availability" : "availability unavailable"}">${available ? `${available} available` : "Currently unavailable"}</span></div><dl class="book-detail-list"><div><dt>ISBN</dt><dd>${esc(book.isbn || "Not recorded")}</dd></div><div><dt>Published</dt><dd>${esc(book.year || "Not recorded")}</dd></div><div><dt>Copies</dt><dd>${available} available of ${Number(book.totalCopies) || 0}</dd></div></dl><button class="btn" onclick="borrow(${Number(book.id)})" ${available < 1 ? "disabled" : ""}>${available ? "Borrow this book" : "Unavailable"}</button></div></div>`;
+  $("book-details-backdrop").hidden = false;
+  window.NorthstarBookCovers.hydrate($("book-details-content"), [book]);
+}
+
+function closeBookDetails(event) {
+  if (event && event.target !== $("book-details-backdrop") && !event.target.closest(".book-details-close")) return;
+  $("book-details-backdrop").hidden = true;
+  $("book-details-content").innerHTML = "";
+}
+
 function loanRows(list, manager) {
   if (!list.length) {
-    return '<p style="color:var(--mu)">Nothing here yet. Borrowed books will appear in this list.</p>';
+    return '<div class="student-empty"><span aria-hidden="true">▤</span><strong>No active loans</strong><p>Books you borrow will appear here with their due dates.</p><button class="btn sm g" onclick="go(\'browse\')">Explore the catalog</button></div>';
   }
-  return `<table><tr><th>Book</th>${manager ? "<th>Member</th>" : ""}<th>Due</th><th></th></tr>${list
+  return `<div class="student-table-wrap"><table class="student-loan-table"><thead><tr><th>Book</th>${manager ? "<th>Member</th>" : ""}<th>Due date</th><th>Status</th><th></th></tr></thead><tbody>${list
     .map((loan) => {
-      const overdue = dateValue(loan.dueDate) < new Date();
-      return `<tr><td>${esc(loan.title)}</td>${manager ? `<td>${esc(loan.studentName || loan.studentId)}</td>` : ""}<td class="${overdue ? "over" : ""}">${esc(formatDate(loan.dueDate))}${overdue ? " (overdue)" : ""}</td><td><button class="btn sm g" onclick="giveBack(${Number(loan.id)})">Return</button></td></tr>`;
+      const overdue = loan.status === "overdue" || dateValue(loan.dueDate) < new Date();
+      const book = books.find((item) => Number(item.id) === Number(loan.bookId));
+      const days = Math.ceil((dateValue(loan.dueDate) - new Date(new Date().toDateString())) / 86400000);
+      const loanBook = book || { id: loan.bookId, title: loan.title, author: "" };
+      return `<tr><td><div class="student-loan-book">${cover(loanBook)}<span><strong title="${esc(loan.title)}">${esc(loan.title)}</strong><small>${esc(book ? book.author : "")}</small></span></div></td>${manager ? `<td>${esc(loan.studentName || loan.studentId)}</td>` : ""}<td class="${overdue ? "over" : ""}"><strong>${esc(formatDate(loan.dueDate))}</strong><small class="due-hint">${overdue ? `${Math.abs(days)} day(s) overdue` : days === 0 ? "Due today" : `${days} day(s) left`}</small></td><td><span class="loan-status ${overdue ? "is-overdue" : "is-active"}">${overdue ? "Overdue" : "On loan"}</span></td><td><button class="btn sm g" onclick="giveBack(${Number(loan.id)})">Return</button></td></tr>`;
     })
-    .join("")}</table>`;
+    .join("")}</tbody></table></div>`;
 }
 
 function categoryStats() {
@@ -207,11 +278,11 @@ function categoryStats() {
   books.forEach((book) => {
     counts[book.category] = (counts[book.category] || 0) + 1;
   });
-  const maximum = Math.max(1, ...Object.values(counts));
+  const total = books.length || 1;
   return Object.entries(counts)
     .map(
       ([category, count]) =>
-        `<div class="hb"><span>${esc(category)}</span><u><i style="width:${(count / maximum) * 100}%"></i></u><b>${count}</b></div>`,
+        `<div class="hb" title="${count} of ${books.length} titles (${((count / total) * 100).toFixed(1)}%)"><span>${esc(category)}</span><u><i style="width:${(count / total) * 100}%"></i></u><b>${count}</b></div>`,
     )
     .join("");
 }
@@ -231,16 +302,13 @@ function bookGrid() {
     return `<p style="color:var(--mu)">No books match "${esc(q)}". Try another title or author.</p>`;
   }
   return matches
-    .map(
-      (book) =>
-        `<div class="book">${cover(book)}<h3>${esc(book.title)}</h3><small>${esc(book.author)} · ${esc(book.year)}</small><div><span class="tag">${esc(book.category)}</span> <small>${bookAvailable(book)} left</small></div><button class="btn sm" ${bookAvailable(book) < 1 ? "disabled" : ""} onclick="borrow(${Number(book.id)})">${bookAvailable(book) < 1 ? "Unavailable" : "Borrow"}</button></div>`,
-    )
+    .map(renderBookCard)
     .join("");
 }
 
 function toolbar() {
   const categories = ["All", ...new Set(books.map((book) => book.category))];
-  return `<div class="bar"><input id="sq" placeholder="Search title or author" value="${esc(q)}" oninput="searchBooks(this.value)"></div><div class="chips" style="margin-bottom:20px">${categories
+  return `<div class="bar"><label class="catalog-search"><span aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 4.5 4.5"/></svg></span><input id="sq" placeholder="Search title, author or ISBN" value="${esc(q)}" oninput="searchBooks(this.value)"></label><span class="catalog-result-count">${filteredBooks().length} titles</span></div><div class="chips" style="margin-bottom:20px">${categories
     .map(
       (category) =>
         `<button class="chip ${category === cat ? "on" : ""}" onclick="setCat('${esc(category).replace(/'/g, "\\'")}')">${esc(category)}</button>`,
@@ -261,20 +329,21 @@ function draw() {
   $("nav").innerHTML = NAV[me.role]
     .map(
       ([key, label]) =>
-        `<button class="nav ${key === view ? "on" : ""}" onclick="go('${key}')">${label}</button>`,
+        `<button class="nav ${key === view ? "on" : ""}" onclick="go('${key}')"><span class="student-nav-icon">${navIcon(key)}</span><span>${label}</span></button>`,
     )
     .join("") +
     (me.role === "student"
-      ? `<button class="nav" onclick="location.href='${BASE}student/fines.html'">My fines</button>`
+      ? `<button class="nav" onclick="location.href='${BASE}student/fines.html'"><span class="student-nav-icon">${navIcon("fines")}</span><span>My fines</span></button>`
       : "");
 
   let html = "";
   if (view === "dash") {
     const recentLoans = active(me.role === "student" ? me.user_id : undefined);
-    const featuredBook = books.find((book) => book.title === "Sapiens") || books[0];
-    html = `<div class="welcome"><div><h3>Hello, ${esc(me.name.split(" ")[0])} 👋</h3><p>${me.role === "student" ? `You have ${recentLoans.length} book(s) on loan. Ready for your next read?` : "Here is how the library looks today."}</p><button class="btn" onclick="go('${me.role === "student" ? "browse" : "books"}')">${me.role === "student" ? "Browse books" : "Manage books"}</button></div>${featuredBook ? `<div class="fcov">${cover(featuredBook)}</div>` : ""}</div>${stats()}<div class="cols"><div class="panel"><h3>${me.role === "student" ? "Your current loans" : "Recent loans"}</h3>${loanRows(recentLoans.slice(0, 6), staff())}</div><div class="panel"><h3>Books by category</h3>${categoryStats()}</div></div>`;
+    const recentlyAdded = [...books].sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
+    const featuredBook = recentlyAdded[0];
+    html = `<section class="welcome"><div class="welcome-copy"><span class="welcome-eyebrow">YOUR PERSONAL LIBRARY</span><h3>Welcome back, ${esc(me.name.split(" ")[0])}</h3><p>${me.role === "student" ? `You have ${recentLoans.length} book(s) on loan. Ready to discover your next read?` : "Here is how the library looks today."}</p><button class="btn" onclick="go('${me.role === "student" ? "browse" : "books"}')">${me.role === "student" ? "Explore the catalog" : "Manage books"}<span aria-hidden="true">→</span></button></div>${featuredBook ? `<div class="fcov">${cover(featuredBook)}</div>` : ""}<span class="welcome-orbit welcome-orbit-one"></span><span class="welcome-orbit welcome-orbit-two"></span></section>${stats()}<div class="cols"><section class="panel"><div class="panel-title-row"><div><span class="section-kicker">KEEP ON TRACK</span><h3>${me.role === "student" ? "Your active loans" : "Recent loans"}</h3></div><button class="section-link" onclick="go('loans')">View all loans <span aria-hidden="true">→</span></button></div>${loanRows(recentLoans.slice(0, 6), staff())}</section><section class="panel category-panel"><div class="panel-title-row"><div><span class="section-kicker">EXPLORE THE COLLECTION</span><h3>Books by category</h3></div><span class="section-count">${new Set(books.map((book) => book.category)).size} categories</span></div>${categoryStats()}</section></div>`;
     if (me.role === "student") {
-      html += `<div class="panel"><h3>Popular right now</h3><div class="grid">${books.slice(0, 6).map((book) => `<div class="book">${cover(book)}<h3>${esc(book.title)}</h3></div>`).join("")}</div></div>`;
+      html += `<section class="panel catalog-panel"><div class="panel-title-row"><div><span class="section-kicker">FRESH FROM THE CATALOG</span><h3>Recently added books</h3></div><button class="section-link" onclick="go('browse')">Browse catalog <span aria-hidden="true">→</span></button></div><div class="grid">${recentlyAdded.slice(0, 6).map(renderBookCard).join("")}</div></section>`;
     }
   } else if (view === "browse") {
     html = `${toolbar()}<div class="grid" id="g">${bookGrid()}</div>`;
@@ -297,6 +366,8 @@ function draw() {
   }
 
   $("view").innerHTML = html;
+  window.NorthstarBookCovers.hydrate($("view"), books);
+  if ($("student-global-search")) $("student-global-search").value = view === "browse" ? q : "";
   const form = $("fb");
   if (form) {
     form.onsubmit = async (event) => {
@@ -319,7 +390,22 @@ function draw() {
       } catch (error) {
         toast(error.message);
       }
+
     };
+  }
+}
+
+function toggleStudentNav(force) {
+  const sidebar = $("student-sidebar");
+  const backdrop = $("nav-backdrop");
+  if (!sidebar || !backdrop) return;
+  const open = typeof force === "boolean" ? force : !sidebar.classList.contains("is-open");
+  sidebar.classList.toggle("is-open", open);
+  backdrop.hidden = !open;
+  const button = document.querySelector(".student-menu-toggle");
+  if (button) {
+    button.setAttribute("aria-expanded", String(open));
+    button.setAttribute("aria-label", open ? "Close navigation" : "Open navigation");
   }
 }
 
@@ -330,7 +416,10 @@ function searchBooks(value) {
     try {
       await refreshCatalog();
       const grid = $("g");
-      if (grid) grid.innerHTML = bookGrid();
+      if (grid) {
+        grid.innerHTML = bookGrid();
+        window.NorthstarBookCovers.hydrate(grid, books);
+      }
     } catch (error) {
       toast(error.message);
     }
@@ -345,6 +434,7 @@ async function borrow(bookId) {
     });
     await refreshData();
     toast("Book borrowed. Check your due date in My loans.");
+    if ($("book-details-backdrop") && !$("book-details-backdrop").hidden) closeBookDetails();
     draw();
   } catch (error) {
     toast(error.message);
@@ -617,8 +707,59 @@ window.giveBack = giveBack;
 window.del = del;
 window.demo = demo;
 window.logout = logout;
+window.toggleStudentNav = toggleStudentNav;
+window.showBookDetails = showBookDetails;
+window.closeBookDetails = closeBookDetails;
 renderDecoration();
 attachAuthForms();
+
+document.addEventListener("click", (event) => {
+  const details = event.target.closest("[data-book-details]");
+  if (details) showBookDetails(details.dataset.bookDetails);
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && $("book-details-backdrop") && !$("book-details-backdrop").hidden) {
+    closeBookDetails();
+  }
+});
+
+if ($("student-date")) {
+  $("student-date").textContent = new Intl.DateTimeFormat(undefined, {
+    weekday: "short", day: "numeric", month: "short",
+  }).format(new Date());
+}
+if ($("student-global-search")) {
+  $("student-global-search").addEventListener("input", (event) => {
+    q = event.target.value;
+    if (view !== "browse") view = "browse";
+    draw();
+    const input = $("student-global-search");
+    input.focus();
+    input.setSelectionRange(q.length, q.length);
+    searchBooks(q);
+  });
+  $("student-global-search").addEventListener("keydown", (event) => {
+    if (event.key === "Enter") go("browse");
+    if (event.key === "Escape") {
+      q = "";
+      $("student-global-search").value = "";
+      draw();
+    }
+  });
+}
+if ($("student-profile-trigger")) {
+  $("student-profile-trigger").addEventListener("click", () => {
+    const menu = $("student-profile-menu");
+    menu.hidden = !menu.hidden;
+    $("student-profile-trigger").setAttribute("aria-expanded", String(!menu.hidden));
+  });
+  document.addEventListener("click", (event) => {
+    if (!event.target.closest(".student-profile-wrap")) {
+      $("student-profile-menu").hidden = true;
+      $("student-profile-trigger").setAttribute("aria-expanded", "false");
+    }
+  });
+}
 
 if (document.body.dataset.page === "index") {
   api("/auth/me")

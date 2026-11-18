@@ -1,4 +1,6 @@
+import logging
 import os
+from urllib.parse import urlencode, urlsplit
 
 from fastapi import APIRouter, Depends, Request
 
@@ -68,14 +70,8 @@ async def login(request: Request):
         return fail("Please enter your login credentials.")
 
     credential = str(data["credential"]).strip()
-    user, reason = controller.user_dao.authenticate_with_reason(credential, data["password"])
+    user, _reason = controller.user_dao.authenticate_with_reason(credential, data["password"])
     if not user:
-        if reason == "Account not found.":
-            return fail(reason, 404)
-        if reason == "Your account has been disabled. Please contact the library administrator.":
-            return fail(reason, 403)
-        if reason == "Incorrect password.":
-            return fail(reason, 401)
         return fail("Invalid email or password.", 401)
 
     request.session["user"] = user
@@ -115,13 +111,22 @@ async def forgot_password(request: Request):
     from services.email_service import send_otp_email
     message = "If that email is registered, a verification code has been sent."
     response_data = None
-    if os.environ.get("SMTP_HOST") and os.environ.get("SMTP_USER"):
+    if os.environ.get("SMTP_HOST") and os.environ.get("SMTP_FROM"):
         # Real delivery: the 6-digit code AND a reset link land in the user's Gmail inbox.
-        base_url = os.environ.get("APP_BASE_URL", "https://127.0.0.1:8000").rstrip("/")
-        reset_url = f"{base_url}/reset-password.html?email={email}"
-        sent, send_message = send_otp_email(email, otp_or_msg, reset_url)
-        message = send_message if sent else "Email delivery failed. Please try again later."
-    elif os.environ.get("OTP_DEV_MODE", "1") == "1":
+        base_url = os.environ.get("APP_BASE_URL", "").strip().rstrip("/")
+        parsed_base_url = urlsplit(base_url)
+        if parsed_base_url.scheme != "https" or not parsed_base_url.netloc:
+            logging.getLogger("uvicorn.error").error(
+                "APP_BASE_URL must be configured with the public HTTPS application URL."
+            )
+            return ok(message=message)
+        reset_url = f"{base_url}/reset-password.html?{urlencode({'email': email})}"
+        sent, delivery_message = send_otp_email(email, otp_or_msg, reset_url)
+        if not sent:
+            logging.getLogger("uvicorn.error").error(
+                "Password-reset email delivery failed: %s", delivery_message
+            )
+    elif os.environ.get("OTP_DEV_MODE", "0") == "1":
         # DEVELOPMENT ONLY: no SMTP configured, so the code is returned for testing.
         response_data = {"dev_otp": otp_or_msg}
         message = "Development mode: use the verification code shown below."
@@ -141,7 +146,7 @@ async def verify_otp(request: Request):
     email = str(data["email"]).strip().lower()
     verified, message, otp_hash = controller.user_dao.verify_otp(email, str(data["otp"]).strip())
     if not verified:
-        return fail(message)
+        return fail("Invalid or expired verification code.")
 
     from itsdangerous import URLSafeTimedSerializer
     signer = URLSafeTimedSerializer(request.app.state.secret_key, salt="password-reset")

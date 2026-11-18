@@ -17,6 +17,7 @@ class DatabaseConnection:
             cursor = cls._instance.connection.cursor()
             cursor.execute("PRAGMA journal_mode=WAL;")
             cursor.execute("PRAGMA busy_timeout=30000;")
+            cursor.execute("PRAGMA foreign_keys=ON;")
             
             cls._instance.init_tables()
             print("[INFO] Database Connection Established with WAL Mode (Singleton Instance)")
@@ -276,6 +277,7 @@ class DatabaseConnection:
         self._add_column_if_missing(cursor, "books", "status", "TEXT DEFAULT 'active'")
         self._add_column_if_missing(cursor, "books", "created_at", "TIMESTAMP")
         self._add_column_if_missing(cursor, "books", "fee", "REAL")
+        self._add_column_if_missing(cursor, "books", "cover_url", "TEXT")
         self._add_column_if_missing(cursor, "notifications", "title", "TEXT DEFAULT ''")
         self._add_column_if_missing(cursor, "notifications", "type", "TEXT")
         self._add_column_if_missing(cursor, "notifications", "ref_id", "INTEGER")

@@ -2,6 +2,7 @@
 notifications, overdue sweep, OTP reset, book fee + PDF receipt, profile — all against
 an in-memory database."""
 import sqlite3
+import base64
 
 import pytest
 from fastapi.testclient import TestClient
@@ -14,6 +15,8 @@ def api(monkeypatch):
     # Fixed environment so tests never depend on a local .env
     monkeypatch.setenv("ADMIN_EMAIL", "admin@library.com")
     monkeypatch.setenv("ADMIN_PASSWORD", "admin123")
+    monkeypatch.setenv("APP_DEBUG", "1")
+    monkeypatch.setenv("SECRET_KEY", "isolated-test-session-secret")
     monkeypatch.setenv("OTP_DEV_MODE", "1")
     # the live server runs HTTPS with Secure cookies; the test client is plain HTTP
     monkeypatch.setenv("SESSION_COOKIE_SECURE", "0")
@@ -52,6 +55,23 @@ def add_book(controller, title="Clean Code", isbn="978-0132350884", copies=2):
     return book_id
 
 
+def test_database_initialization_enables_foreign_keys(monkeypatch, tmp_path):
+    previous_instance = DatabaseConnection._instance
+    monkeypatch.setattr(DatabaseConnection, "_instance", None)
+    monkeypatch.setenv("LIBRARY_DB_PATH", str(tmp_path / "foreign-keys.sqlite"))
+    database = DatabaseConnection()
+    try:
+        assert database.connection.execute("PRAGMA foreign_keys").fetchone()[0] == 1
+        with pytest.raises(sqlite3.IntegrityError):
+            database.connection.execute(
+                "INSERT INTO transactions (student_id, book_id, due_date) VALUES (?, ?, ?)",
+                ("missing-student", -1, "2099-01-01"),
+            )
+    finally:
+        database.connection.close()
+        DatabaseConnection._instance = previous_instance
+
+
 # --- Auth ---
 def test_register_login_and_me(api):
     client, _, _ = api
@@ -64,11 +84,11 @@ def test_register_login_and_me(api):
     client.post("/api/auth/logout")
     wrong = client.post("/api/auth/login", json={"credential": "alex@uni.edu", "password": "wrongpass"})
     assert wrong.status_code == 401
-    assert wrong.json()["message"] == "Incorrect password."
+    assert wrong.json()["message"] == "Invalid email or password."
 
     missing = client.post("/api/auth/login", json={"credential": "missing@library.com", "password": "secret12"})
-    assert missing.status_code == 404
-    assert missing.json()["message"] == "Account not found."
+    assert missing.status_code == 401
+    assert missing.json()["message"] == wrong.json()["message"]
 
     deactivated = client.post("/api/auth/register", json={
         "student_id": "STU-2049", "full_name": "Inactive User", "email": "inactive@uni.edu",
@@ -77,8 +97,8 @@ def test_register_login_and_me(api):
     with DatabaseConnection().get_connection() as conn:
         conn.execute("UPDATE users SET status='inactive' WHERE email='inactive@uni.edu'")
     disabled = client.post("/api/auth/login", json={"credential": "inactive@uni.edu", "password": "secret12"})
-    assert disabled.status_code == 403
-    assert disabled.json()["message"] == "Your account has been disabled. Please contact the library administrator."
+    assert disabled.status_code == 401
+    assert disabled.json()["message"] == wrong.json()["message"]
 
     login_as(client, "alex@uni.edu", "secret12")
     me = client.get("/api/auth/me").json()
@@ -147,6 +167,93 @@ def test_password_reset_otp_flow(api):
     assert client.post("/api/auth/forgot-password", json={"email": "ghost@nowhere.io"}).status_code == 200
 
 
+def test_smtp_password_reset_sends_otp_and_reset_link(api, monkeypatch):
+    import smtplib
+
+    client, _, _ = api
+    sent = {}
+
+    class FakeSMTP:
+        def __init__(self, host, port, timeout):
+            sent["connection"] = (host, port, timeout)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def starttls(self):
+            sent["tls"] = True
+
+        def login(self, username, password):
+            sent["credentials"] = (username, password)
+
+        def sendmail(self, sender, recipients, message):
+            if sent.get("fail_delivery"):
+                raise smtplib.SMTPException("test transport failure")
+            sent["message"] = message
+
+    monkeypatch.setattr("smtplib.SMTP", FakeSMTP)
+    monkeypatch.setenv("SMTP_HOST", "smtp.example.test")
+    monkeypatch.setenv("SMTP_PORT", "587")
+    monkeypatch.setenv("SMTP_FROM", "library@example.test")
+    monkeypatch.setenv("SMTP_USER", "smtp-user")
+    monkeypatch.setenv("SMTP_PASS", "smtp-password")
+    monkeypatch.setenv("APP_BASE_URL", "https://library.example.test")
+    monkeypatch.setenv("OTP_DEV_MODE", "0")
+
+    response = client.post("/api/auth/forgot-password", json={"email": "nina@library.com"})
+    assert response.status_code == 200
+    assert "dev_otp" not in response.json().get("data", {})
+    assert sent["connection"] == ("smtp.example.test", 587, 10)
+    assert sent["tls"] is True
+    assert sent["credentials"] == ("smtp-user", "smtp-password")
+    from email import message_from_string
+    message = message_from_string(sent["message"])
+    body = message.get_payload(decode=True).decode(message.get_content_charset())
+    assert "verification code" in body
+    assert "https://library.example.test/reset-password.html?email=nina%40library.com" in body
+    sent["fail_delivery"] = True
+    failed_delivery = client.post("/api/auth/forgot-password", json={"email": "nina@library.com"})
+    unknown_account = client.post("/api/auth/forgot-password", json={"email": "ghost@nowhere.io"})
+    assert failed_delivery.json()["message"] == unknown_account.json()["message"]
+
+
+def test_json_body_rejects_malformed_and_non_object_requests(api):
+    client, _, _ = api
+    login_as(client, "nina@library.com", "passw0rd1")
+    malformed = client.put(
+        "/api/profile/preferences",
+        content="{",
+        headers={"Content-Type": "application/json"},
+    )
+    non_object = client.put("/api/profile/preferences", json=["not", "an", "object"])
+    assert malformed.status_code == 400
+    assert non_object.status_code == 400
+    assert malformed.json()["message"] == non_object.json()["message"]
+
+
+def test_existing_sessions_respect_role_and_status_changes(api):
+    admin_client, _, app = api
+    librarian_client = TestClient(app, follow_redirects=False)
+    login_as(admin_client, "admin@library.com", "admin123")
+    login_as(librarian_client, "ray@library.com", "passw0rd1")
+
+    changed_role = admin_client.put("/api/users/STAFF01/role", json={"role": "student"})
+    assert changed_role.status_code == 200
+    assert librarian_client.get("/api/students").status_code == 403
+    assert librarian_client.get("/admin/users.html").headers["Location"].endswith("/student/dashboard.html")
+
+    restored_role = admin_client.put("/api/users/STAFF01/role", json={"role": "librarian"})
+    assert restored_role.status_code == 200
+    assert librarian_client.get("/api/students").status_code == 200
+    deactivated = admin_client.put("/api/users/STAFF01/status", json={"status": "inactive"})
+    assert deactivated.status_code == 200
+    assert librarian_client.get("/api/dashboard").status_code == 401
+    assert librarian_client.get("/admin/dashboard.html").headers["Location"].endswith("/login.html")
+
+
 def test_password_reset_requires_otp_verification_first(api):
     """The OTP is verified before the reset: a signed token unlocks the change,
     and it cannot be reused, and the reset is refused without OTP or token."""
@@ -188,13 +295,25 @@ def test_students_cannot_reach_admin_apis(api):
 
 
 def test_dashboard_pages_require_a_session_and_matching_role(api):
-    client, _, _ = api
+    client, controller, _ = api
+    assert client.get("/").headers["Location"].endswith("/login.html")
     assert client.get("/student/dashboard.html").status_code == 302
     assert client.get("/admin/dashboard.html").status_code == 302
     assert client.get("/admin/librarian-dashboard.html").status_code == 302
 
-    login_as(client, "nina@library.com", "passw0rd1")
-    assert client.get("/student/dashboard.html").status_code == 200
+    book_id = add_book(controller, title="Dashboard book", isbn="978-7777777777")
+    student_login = login_as(client, "nina@library.com", "passw0rd1")
+    assert student_login.json()["data"]["user"]["role"] == "student"
+    assert client.post("/api/borrow", json={"student_id": "STU999", "book_id": book_id}).status_code == 200
+    assert client.get("/").headers["Location"].endswith("/student/dashboard.html")
+    student_dashboard = client.get("/student/dashboard.html")
+    assert student_dashboard.status_code == 200
+    assert 'data-need="student"' in student_dashboard.text
+    assert 'data-page="dash"' in student_dashboard.text
+    assert "url=admin/dashboard.html" not in student_dashboard.text
+    assert "Dashboard book" in student_dashboard.text
+    assert "Robert C. Martin" in student_dashboard.text
+    assert client.get("/api/auth/me").json()["data"]["user"]["role"] == "student"
     assert client.get("/student/fines.html").status_code == 200
     assert client.get("/admin/dashboard.html").headers["Location"].endswith("/student/dashboard.html")
     assert client.get("/admin/fines.html").headers["Location"].endswith("/student/dashboard.html")
@@ -204,13 +323,22 @@ def test_dashboard_pages_require_a_session_and_matching_role(api):
     assert client.get("/student/dashboard.html").headers["Location"].endswith("/login.html")
     assert client.get("/api/dashboard").status_code == 401
 
-    login_as(client, "ray@library.com", "passw0rd1")
-    assert client.get("/admin/dashboard.html").status_code == 200
+    librarian_login = login_as(client, "ray@library.com", "passw0rd1")
+    assert librarian_login.json()["data"]["user"]["role"] == "librarian"
+    assert client.get("/").headers["Location"].endswith("/admin/dashboard.html")
+    librarian_dashboard = client.get("/admin/dashboard.html")
+    assert librarian_dashboard.status_code == 200
+    assert 'data-need="staff"' in librarian_dashboard.text
     assert client.get("/admin/librarian-dashboard.html").status_code == 200
     assert client.get("/admin/fines.html").status_code == 200
     assert client.get("/admin/users.html").headers["Location"].endswith("/admin/dashboard.html")
 
-    login_as(client, "admin@library.com", "admin123")
+    admin_login = login_as(client, "admin@library.com", "admin123")
+    assert admin_login.json()["data"]["user"]["role"] == "admin"
+    assert client.get("/").headers["Location"].endswith("/admin/dashboard.html")
+    admin_dashboard = client.get("/admin/dashboard.html")
+    assert admin_dashboard.status_code == 200
+    assert 'data-need="staff"' in admin_dashboard.text
     assert client.get("/admin/users.html").status_code == 200
     assert client.get("/admin/system-settings.html").status_code == 200
     assert client.get("/admin/fines.html").status_code == 200
@@ -289,6 +417,246 @@ def test_book_crud_and_search(api):
     assert client.get("/api/books?availability=available").status_code == 200
     assert client.get(f"/api/books/{book_id}").status_code == 200
     assert client.get("/api/books/9999").status_code == 404
+
+
+def test_book_cover_url_validation_upload_and_permissions(api, monkeypatch, tmp_path):
+    client, _, _ = api
+    login_as(client, "admin@library.com", "admin123")
+    created = client.post("/api/books", json={
+        "title": "Verified Cover Book", "author": "Cover Author", "isbn": "978-0000000001",
+        "cover_url": "https://books.google.com/books/content?id=verified&printsec=frontcover&img=1",
+    })
+    assert created.status_code == 200
+    book_id = created.json()["data"]["book"]["id"]
+    assert created.json()["data"]["book"]["cover_url"].startswith("https://books.google.com/")
+    assert client.put(f"/api/books/{book_id}", json={"cover_url": "javascript:alert(1)"}).status_code == 400
+
+    import routes.book_routes as book_routes
+    cover_dir = tmp_path / "book-covers"
+    monkeypatch.setattr(book_routes, "BOOK_COVER_DIR", cover_dir)
+    png = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/b+8AAAAASUVORK5CYII="
+    )
+    uploaded = client.put(f"/api/books/{book_id}/cover", json={
+        "content_type": "image/png", "image": base64.b64encode(png).decode("ascii"),
+    })
+    assert uploaded.status_code == 200
+    cover_url = uploaded.json()["data"]["book"]["cover_url"]
+    cover_path = cover_dir / cover_url.rsplit("/", 1)[-1]
+    assert cover_path.is_file()
+    assert cover_path.read_bytes() == png
+
+    assert client.put(f"/api/books/{book_id}/cover", json={
+        "content_type": "image/png", "image": "not-base64",
+    }).status_code == 400
+    client.post("/api/auth/logout")
+    login_as(client, "nina@library.com", "passw0rd1")
+    assert client.put(f"/api/books/{book_id}/cover", json={
+        "content_type": "image/png", "image": base64.b64encode(png).decode("ascii"),
+    }).status_code == 403
+
+
+def test_book_cover_lookup_requires_exact_metadata(api, monkeypatch):
+    client, _, _ = api
+    import routes.book_routes as book_routes
+
+    monkeypatch.setattr(book_routes, "COVER_LOOKUP_CACHE", {})
+    monkeypatch.setattr(book_routes, "GOOGLE_BOOKS_COOLDOWN_UNTIL", 0)
+    searches = []
+
+    async def no_google_results(_params):
+        return []
+
+    async def search_open_library(params):
+        searches.append(params)
+        if "isbn" in params:
+            return [
+                {"title": "Unrelated Title", "author_name": ["Other Author"],
+                 "isbn": ["9780132350884"], "cover_i": 111},
+                {"title": "Clean Code", "author_name": ["Robert C. Martin"],
+                 "isbn": ["9780132350884"], "cover_i": 8065615},
+            ]
+        if "author" in params:
+            return [{"title": "Rare Exact Title", "author_name": ["Wrong Author"], "cover_i": 222}]
+        return [{"title": "Rare Exact Title", "author_name": ["Cover Author"], "cover_i": 333}]
+
+    monkeypatch.setattr(book_routes, "_search_open_library", search_open_library)
+    monkeypatch.setattr(book_routes, "_search_google_books", no_google_results)
+    monkeypatch.setattr(book_routes, "_verify_cover_image", lambda _url: _true_async())
+    assert client.get("/api/books/cover-lookup", params={
+        "isbn": "9780132350884", "title": "Clean Code", "author": "Robert C. Martin",
+    }).status_code == 401
+
+    login_as(client, "nina@library.com", "passw0rd1")
+    isbn_match = client.get("/api/books/cover-lookup", params={
+        "isbn": "9780132350884", "title": "Clean Code", "author": "Robert C. Martin",
+    })
+    assert isbn_match.json()["data"]["cover_url"] == (
+        "https://covers.openlibrary.org/b/id/8065615-L.jpg?default=false"
+    )
+    assert searches[0] == {"isbn": "9780132350884"}
+
+    title_match = client.get("/api/books/cover-lookup", params={
+        "isbn": "NS-9001", "title": "Rare Exact Title", "author": "Cover Author",
+    })
+    assert title_match.json()["data"]["cover_url"] == (
+        "https://covers.openlibrary.org/b/id/333-L.jpg?default=false"
+    )
+    assert searches[-1] == {"title": "Rare Exact Title"}
+
+    assert book_routes._same_author("Kurose & Ross", ["James F. Kurose", "Keith W. Ross"])
+    assert book_routes._same_author("Cormen et al.", ["Thomas H. Cormen", "Charles E. Leiserson"])
+    assert book_routes._normalized_book_title(
+        "The Pragmatic Bookshelf: Python Crash Course"
+    ) == book_routes._normalized_book_title("Python Crash Course")
+    assert book_routes._normalized_book_title(
+        "A People's History of the United States"
+    ) == book_routes._normalized_book_title("A People's History")
+    assert book_routes._normalized_book_title(
+        "Discrete Mathematics and Its Applications"
+    ) == book_routes._normalized_book_title("Discrete Mathematics")
+    assert book_routes._open_library_query({
+        "title": 'A "Quoted" Title', "author": "Robert C. Martin",
+    }) == 'title:"A \\"Quoted\\" Title" AND author:"Robert C. Martin"'
+    assert book_routes._open_library_query({
+        "title": "The Pragmatic Bookshelf: Python Crash Course", "author": "Eric Matthes",
+    }) == 'title:"Python Crash Course" AND author:"Eric Matthes"'
+    assert book_routes._book_match(
+        {
+            "title": "Python Crash Course, 2nd Edition",
+            "author_name": ["Eric Matthes"],
+            "isbn": ["9781593279288"],
+            "cover_i": 8800209,
+        },
+        "The Pragmatic Bookshelf: Python Crash Course",
+        "Eric Matthes",
+        "9781593279288",
+    )
+
+
+async def _true_async():
+    return True
+
+
+def test_book_cover_lookup_uses_google_then_open_library_and_saves_only_missing(api, monkeypatch):
+    client, controller, _ = api
+    import routes.book_routes as book_routes
+
+    monkeypatch.setattr(book_routes, "COVER_LOOKUP_CACHE", {})
+    monkeypatch.setattr(book_routes, "GOOGLE_BOOKS_COOLDOWN_UNTIL", 0)
+    book_id = add_book(controller)
+    google_url = "https://books.google.com/books/content?id=clean-code"
+    open_library_url = "https://covers.openlibrary.org/b/id/8065615-L.jpg?default=false"
+    google_queries = []
+    open_library_queries = []
+
+    async def google_results(params):
+        google_queries.append(params)
+        if "isbn" not in params:
+            return []
+        return [{
+            "volumeInfo": {
+                "title": "Clean Code",
+                "authors": ["Robert C. Martin"],
+                "industryIdentifiers": [{"type": "ISBN_13", "identifier": "9780132350884"}],
+                "imageLinks": {"thumbnail": google_url},
+            },
+        }]
+
+    async def open_library_results(params):
+        open_library_queries.append(params)
+        if "isbn" not in params:
+            return []
+        return [{
+            "title": "Clean Code",
+            "author_name": ["Robert C. Martin"],
+            "isbn": ["9780132350884"],
+            "cover_i": 8065615,
+        }]
+
+    async def verify(url):
+        return url == open_library_url
+
+    monkeypatch.setattr(book_routes, "_search_google_books", google_results)
+    monkeypatch.setattr(book_routes, "_search_open_library", open_library_results)
+    monkeypatch.setattr(book_routes, "_verify_cover_image", verify)
+    login_as(client, "nina@library.com", "passw0rd1")
+
+    response = client.get("/api/books/cover-lookup", params={"book_id": book_id})
+    assert response.status_code == 200
+    assert response.json()["data"]["cover_url"] == open_library_url
+    assert google_queries[0] == {"isbn": "9780132350884"}
+    assert open_library_queries[0] == {"isbn": "9780132350884"}
+    assert controller.get_book(book_id)["cover_url"] == open_library_url
+
+    existing_url = "https://covers.openlibrary.org/b/id/999-L.jpg?default=false"
+    assert controller.update_book(book_id, cover_url=existing_url)[0]
+    second_book_id = controller.register_book(
+        "Clean Code", "Robert C. Martin", "978-0132350885", category="Engineering",
+        total_copies=1, cover_url=existing_url,
+    )
+    second = client.get("/api/books/cover-lookup", params={"book_id": second_book_id})
+    assert second.status_code == 200
+    assert controller.get_book(second_book_id)["cover_url"] == existing_url
+
+
+def test_book_cover_lookup_reports_provider_failure(api, monkeypatch):
+    client, _, _ = api
+    import httpx
+    import routes.book_routes as book_routes
+
+    login_as(client, "nina@library.com", "passw0rd1")
+    monkeypatch.setattr(book_routes, "COVER_LOOKUP_CACHE", {})
+
+    async def unavailable(_params):
+        raise httpx.ConnectError("provider unavailable", request=httpx.Request("GET", "https://openlibrary.org"))
+
+    monkeypatch.setattr(book_routes, "_search_open_library", unavailable)
+    response = client.get("/api/books/cover-lookup", params={
+        "isbn": "9780132350884", "title": "Clean Code", "author": "Robert C. Martin",
+    })
+    assert response.status_code == 502
+    assert response.json()["message"] == "Book cover lookup is temporarily unavailable."
+
+
+def test_book_cover_lookup_replaces_only_a_failed_saved_cover(api, monkeypatch):
+    client, controller, _ = api
+    import routes.book_routes as book_routes
+
+    monkeypatch.setattr(book_routes, "COVER_LOOKUP_CACHE", {})
+    book_id = add_book(controller)
+    failed_url = "https://covers.openlibrary.org/b/id/999-L.jpg?default=false"
+    valid_url = "https://covers.openlibrary.org/b/id/8065615-L.jpg?default=false"
+    assert controller.update_book(book_id, cover_url=failed_url)[0]
+
+    async def google_results(_params):
+        return []
+
+    async def open_library_results(params):
+        if "isbn" in params:
+            return [{
+                "title": "Clean Code",
+                "author_name": ["Robert C. Martin"],
+                "isbn": ["9780132350884"],
+                "cover_i": 8065615,
+            }]
+        return []
+
+    async def verify(url):
+        return url == valid_url
+
+    monkeypatch.setattr(book_routes, "_search_google_books", google_results)
+    monkeypatch.setattr(book_routes, "_search_open_library", open_library_results)
+    monkeypatch.setattr(book_routes, "_verify_cover_image", verify)
+    login_as(client, "nina@library.com", "passw0rd1")
+
+    response = client.get(
+        "/api/books/cover-lookup",
+        params={"book_id": book_id, "exclude": failed_url},
+    )
+    assert response.status_code == 200
+    assert response.json()["data"]["cover_url"] == valid_url
+    assert controller.get_book(book_id)["cover_url"] == valid_url
 
 
 # --- Borrow / Return ---
