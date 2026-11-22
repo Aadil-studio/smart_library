@@ -133,6 +133,11 @@ async def staff_required(request: Request):
                               "You do not have permission to perform this action.")
 
 
+async def librarian_required(request: Request):
+    return await _require_role(request, "librarian",
+                              "Librarian access is required for this action.")
+
+
 async def admin_required(request: Request):
     return await _require_role(request, "admin", "Administrator access is required for this action.")
 

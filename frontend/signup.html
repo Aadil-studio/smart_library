@@ -7,8 +7,14 @@
   <div><h1>Every book your campus needs, in one place.</h1><p>Search 60 titles, borrow in one tap, and keep track of due dates. Librarians and admins manage the whole shelf from the same app.</p></div>
   <div class="shelf" id="shelf"></div><div class="float" id="float"></div></section>
 <section class="formside"><div class="card">
-<h2>Join the library</h2><p class="sub">Create your student account, then sign in to get started.</p><form id="fup"><label>Full name</label><input id="sn" required><div class="row2"><div><label>Student ID</label><input id="si" placeholder="STU-3001" required></div><div><label>Semester</label><select id="ss"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option></select></div></div>
-   <label>University email</label><input id="se" type="email" required><label>Department</label><select id="sd"><option>Computer Science</option><option>Engineering</option><option>Business</option><option>Health Sciences</option><option>Natural Sciences</option><option>Arts &amp; Humanities</option></select>
+<h2>Join the library</h2><p class="sub">Create your student account, then sign in to get started.</p><form id="fup">
+   <div class="signup-avatar-picker">
+     <div class="signup-avatar-preview" id="signup-avatar-preview" aria-hidden="true">N</div>
+     <div class="signup-avatar-copy"><strong>Profile photo</strong><span>Optional · JPG, PNG, or WEBP · max 2 MB</span><label class="signup-avatar-button" for="signup-avatar-input">Upload photo (optional)</label></div>
+     <input id="signup-avatar-input" class="hide" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp">
+   </div>
+   <label>Full name</label><input id="sn" required><div class="row2"><div><label>Student ID</label><input id="si" placeholder="STU-3001" required></div><div><label>Semester</label><select id="ss"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option></select></div></div>
+   <label>University email</label><input id="se" type="email" required><label>Department</label><select id="sd"><option>Software Engineering</option><option>Computer Science</option><option>Information Technology</option><option>Artificial Intelligence &amp; Data Science</option><option>Cybersecurity</option><option>Electronics &amp; Telecommunication</option><option>Electrical Engineering</option><option>Business Administration (BBA)</option><option>Commerce &amp; Economics</option><option>Mathematics</option><option>Physics</option><option>English Literature &amp; Linguistics</option><option>Education</option><option>Other</option></select>
    <div class="row2"><div><label>Password</label><input id="sp" type="password" minlength="8" required></div><div><label>Confirm</label><input id="sc" type="password" required></div></div>
    <button class="btn" style="width:100%;margin-top:18px">Create account</button></form><p class="alt">Already registered? <a class="lnk" href="login.html">Sign in</a></p>
 </div></section></div>

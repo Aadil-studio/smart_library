@@ -149,6 +149,31 @@ class DatabaseConnection:
         );
         """)
 
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS wishlist (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL,
+            book_id INTEGER NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE (user_id, book_id),
+            FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+            FOREIGN KEY (book_id) REFERENCES books(id) ON DELETE CASCADE
+        );
+        """)
+
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS student_loan_renewals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            loan_id INTEGER NOT NULL UNIQUE,
+            student_id TEXT NOT NULL,
+            original_due_date DATE NOT NULL,
+            renewed_due_date DATE NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (loan_id) REFERENCES transactions(id) ON DELETE CASCADE,
+            FOREIGN KEY (student_id) REFERENCES users(user_id) ON DELETE CASCADE
+        );
+        """)
+
         # Migrate a pre-existing book_fees table that required a book/transaction and
         # had no uploaded_by column (SQLite CHECK/NOT NULL constraints cannot be
         # altered in place, so the table is rebuilt and the data preserved).
@@ -254,8 +279,19 @@ class DatabaseConnection:
             otp_hash TEXT NOT NULL,
             expires_at TIMESTAMP NOT NULL,
             used INTEGER DEFAULT 0,
+            verified INTEGER DEFAULT 0,
+            attempts INTEGER DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(user_id)
+        );
+        """)
+
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS otp_request_limits (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email_key TEXT NOT NULL,
+            ip_key TEXT NOT NULL,
+            requested_at REAL NOT NULL
         );
         """)
 
@@ -273,6 +309,7 @@ class DatabaseConnection:
     def _migrate_columns(self, cursor):
         # Extend existing tables without destroying data (SQLite ALTER ADD COLUMN is additive)
         self._add_column_if_missing(cursor, "users", "preferences", "TEXT")
+        self._add_column_if_missing(cursor, "users", "avatar_url", "TEXT")
         self._add_column_if_missing(cursor, "books", "description", "TEXT DEFAULT ''")
         self._add_column_if_missing(cursor, "books", "status", "TEXT DEFAULT 'active'")
         self._add_column_if_missing(cursor, "books", "created_at", "TIMESTAMP")
@@ -282,6 +319,8 @@ class DatabaseConnection:
         self._add_column_if_missing(cursor, "notifications", "type", "TEXT")
         self._add_column_if_missing(cursor, "notifications", "ref_id", "INTEGER")
         self._add_column_if_missing(cursor, "fines", "collected_by", "TEXT")
+        self._add_column_if_missing(cursor, "password_reset_otps", "verified", "INTEGER DEFAULT 0")
+        self._add_column_if_missing(cursor, "password_reset_otps", "attempts", "INTEGER DEFAULT 0")
         # Every book carries the library book fee (Rs. 4000 unless overridden per title)
         cursor.execute("UPDATE books SET fee = ? WHERE fee IS NULL",
                        (os.environ.get("BOOK_FEE", "4000"),))
@@ -305,6 +344,8 @@ class DatabaseConnection:
             "CREATE INDEX IF NOT EXISTS idx_book_fees_student ON book_fees(student_id)",
             "CREATE INDEX IF NOT EXISTS idx_book_fees_txn ON book_fees(transaction_id)",
             "CREATE INDEX IF NOT EXISTS idx_otps_user ON password_reset_otps(user_id)",
+            "CREATE INDEX IF NOT EXISTS idx_otp_request_email ON otp_request_limits(email_key, requested_at)",
+            "CREATE INDEX IF NOT EXISTS idx_otp_request_ip ON otp_request_limits(ip_key, requested_at)",
         ]
         for statement in indexes:
             cursor.execute(statement)

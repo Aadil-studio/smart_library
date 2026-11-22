@@ -19,6 +19,7 @@ warning. Session cookies are marked Secure.
 import os
 import re
 import secrets
+import logging
 
 import uvicorn
 from fastapi import FastAPI, Request
@@ -38,11 +39,13 @@ from routes.borrow_routes import router as borrow_router
 from routes.dashboard_routes import router as dashboard_router
 from routes.fine_routes import fee_router, router as fine_router
 from routes.notification_routes import router as notification_router
-from routes.profile_routes import router as profile_router
+from routes.profile_routes import (admin_profile_router, librarian_router as librarian_profile_router,
+                                   router as profile_router)
 from routes.report_routes import router as report_router
 from routes.reservation_routes import router as reservation_router
 from routes.settings_routes import router as settings_router
 from routes.student_routes import router as student_router
+from routes.student_portal_routes import router as student_portal_router
 from routes.user_routes import activity_router, router as user_router
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -103,17 +106,27 @@ ensure_https_certificate()
 
 
 def load_env_file():
-    """Tiny .env loader (no extra dependency). Existing environment variables win."""
+    """Load .env next to this module; existing process environment variables win."""
     env_path = os.path.join(BASE_DIR, ".env")
-    if not os.path.exists(env_path):
-        return
-    with open(env_path, encoding="utf-8") as handle:
-        for line in handle:
-            line = line.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            key, _, value = line.partition("=")
-            os.environ.setdefault(key.strip(), value.strip().strip("'\""))
+    sources = {}
+    exists = os.path.isfile(env_path)
+    if exists:
+        with open(env_path, encoding="utf-8-sig") as handle:
+            for line in handle:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, _, value = line.partition("=")
+                key = key.strip()
+                if key in os.environ:
+                    sources[key] = "process"
+                else:
+                    os.environ[key] = value.strip().strip("'\"")
+                    sources[key] = ".env"
+    for key in ("SMTP_HOST", "SMTP_PORT", "SMTP_FROM", "SMTP_USER", "SMTP_PASSWORD", "SMTP_PASS", "APP_BASE_URL"):
+        if key in os.environ and key not in sources:
+            sources[key] = "process"
+    return {"path": os.path.abspath(env_path), "exists": exists, "sources": sources}
 
 
 def debug_enabled() -> bool:
@@ -142,7 +155,21 @@ def seed_default_admin(controller: LibraryController):
 
 
 def create_app() -> FastAPI:
-    load_env_file()
+    env_info = load_env_file()
+    from services.email_service import smtp_configuration_status
+
+    email_status = smtp_configuration_status()
+    logging.getLogger("uvicorn.error").info(
+        "Environment file %s (exists=%s); SMTP detected: host=%s, port=%s, sender=%s, "
+        "username=%s, password=%s.",
+        env_info["path"],
+        env_info["exists"],
+        email_status["smtp_host_detected"],
+        email_status["smtp_port_detected"],
+        email_status["smtp_sender_detected"],
+        email_status["smtp_username_detected"],
+        email_status["smtp_password_detected"],
+    )
 
     secret_key = os.environ.get("SECRET_KEY")
     if not secret_key:
@@ -154,6 +181,9 @@ def create_app() -> FastAPI:
     app = FastAPI(title="Smart Library API", docs_url="/api/docs", redoc_url=None,
                   openapi_url="/api/openapi.json")
     app.state.secret_key = secret_key
+    app.state.env_file_path = env_info["path"]
+    app.state.env_file_exists = env_info["exists"]
+    app.state.env_sources = env_info["sources"]
     app.state.templates = Jinja2Templates(directory=frontend_dir)
     controller = LibraryController()
     app.state.library_controller = controller
@@ -168,9 +198,10 @@ def create_app() -> FastAPI:
         https_only=os.environ.get("SESSION_COOKIE_SECURE", "1") == "1",
     )
 
-    for router in (auth_router, book_router, student_router, borrow_router, fine_router,
+    for router in (auth_router, book_router, student_router, student_portal_router, borrow_router, fine_router,
                    fee_router, reservation_router, notification_router, report_router,
-                   dashboard_router, profile_router, user_router, activity_router, settings_router):
+                   dashboard_router, profile_router, librarian_profile_router, admin_profile_router,
+                   user_router, activity_router, settings_router):
         app.include_router(router)
 
     # --- Errors: JSON for API calls, friendly redirect for pages ---
@@ -297,6 +328,16 @@ def create_app() -> FastAPI:
     @app.get("/student/{page_name}")
     async def student_page(request: Request, page_name: str):
         return _role_page_response(request, "student", page_name, ("student",))
+
+    @app.get("/librarian/profile.html")
+    async def librarian_profile_page(request: Request):
+        user = current_user(request)
+        if not user:
+            return RedirectResponse("/login.html", status_code=302)
+        if user.get("role") != "librarian":
+            destination = "/student/dashboard.html" if user.get("role") == "student" else "/admin/dashboard.html"
+            return RedirectResponse(destination, status_code=302)
+        return FileResponse(os.path.join(frontend_dir, "librarian", "profile.html"))
 
     @app.get("/admin/{page_name}")
     async def staff_page(request: Request, page_name: str):

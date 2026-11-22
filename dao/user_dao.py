@@ -3,7 +3,9 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import math
 import secrets
+import time
 from datetime import datetime, timedelta
 
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -11,6 +13,10 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from config.database import DatabaseConnection
 
 OTP_MINUTES_VALID = 10
+OTP_REQUEST_COOLDOWN_SECONDS = 60
+OTP_EMAIL_REQUESTS_PER_HOUR = 5
+OTP_IP_REQUESTS_PER_HOUR = 10
+OTP_MAX_VERIFICATION_ATTEMPTS = 5
 
 
 class UserDAO:
@@ -117,6 +123,12 @@ class UserDAO:
         cursor.execute("SELECT * FROM users WHERE user_id=?", (user_id,))
         return self._public_user(cursor.fetchone())
 
+    def update_avatar_url(self, user_id, avatar_url):
+        cursor = self.db.cursor()
+        cursor.execute("UPDATE users SET avatar_url=? WHERE user_id=?", (avatar_url, user_id))
+        self.db.commit()
+        return self.get_user_by_id(user_id)
+
     def update_profile(self, user_id, name=None, email=None, phone=None, department=None, semester=None):
         fields, values = [], []
         for column, value in (("name", name), ("email", email), ("phone", phone),
@@ -168,6 +180,54 @@ class UserDAO:
         self.db.commit()
 
     # --- Password reset OTPs (hashed + expiring, stored in password_reset_otps) ---
+    @staticmethod
+    def _otp_rate_key(value: str, secret_key: str) -> str:
+        return hmac.new(secret_key.encode(), value.encode(), hashlib.sha256).hexdigest()
+
+    def check_otp_request_limit(self, email, ip_address, secret_key):
+        """Record a request without storing the raw email address or client IP."""
+        now = time.time()
+        email_key = self._otp_rate_key(email, secret_key)
+        ip_key = self._otp_rate_key(ip_address or "unknown", secret_key)
+        cursor = self.db.cursor()
+        cursor.execute("BEGIN IMMEDIATE")
+        cursor.execute("DELETE FROM otp_request_limits WHERE requested_at < ?", (now - 86400,))
+
+        latest = cursor.execute(
+            "SELECT requested_at FROM otp_request_limits WHERE email_key=? ORDER BY requested_at DESC LIMIT 1",
+            (email_key,),
+        ).fetchone()
+        if latest:
+            wait = math.ceil(latest["requested_at"] + OTP_REQUEST_COOLDOWN_SECONDS - now)
+            if wait > 0:
+                self.db.rollback()
+                return False, wait
+
+        email_count, email_oldest = cursor.execute(
+            """SELECT COUNT(*), MIN(requested_at) FROM otp_request_limits
+               WHERE email_key=? AND requested_at > ?""",
+            (email_key, now - 3600),
+        ).fetchone()
+        if email_count >= OTP_EMAIL_REQUESTS_PER_HOUR:
+            self.db.rollback()
+            return False, max(1, math.ceil(email_oldest + 3600 - now))
+
+        ip_count, ip_oldest = cursor.execute(
+            """SELECT COUNT(*), MIN(requested_at) FROM otp_request_limits
+               WHERE ip_key=? AND requested_at > ?""",
+            (ip_key, now - 3600),
+        ).fetchone()
+        if ip_count >= OTP_IP_REQUESTS_PER_HOUR:
+            self.db.rollback()
+            return False, max(1, math.ceil(ip_oldest + 3600 - now))
+
+        cursor.execute(
+            "INSERT INTO otp_request_limits (email_key, ip_key, requested_at) VALUES (?, ?, ?)",
+            (email_key, ip_key, now),
+        )
+        self.db.commit()
+        return True, OTP_REQUEST_COOLDOWN_SECONDS
+
     def generate_otp(self, email):
         cursor = self.db.cursor()
         cursor.execute("SELECT user_id, name FROM users WHERE email=?", (email,))
@@ -180,11 +240,20 @@ class UserDAO:
         cursor.execute("UPDATE password_reset_otps SET used=1 WHERE user_id=? AND used=0", (user["user_id"],))
         cursor.execute(
             "INSERT INTO password_reset_otps (user_id, otp_hash, expires_at) VALUES (?, ?, ?)",
-            (user["user_id"], hashlib.sha256(otp.encode()).hexdigest(), expires_at),
+            (user["user_id"], generate_password_hash(otp), expires_at),
         )
         self.db.commit()
         self.log_activity(user["user_id"], user["name"], "OTP_GENERATE", "Password reset OTP generated")
         return otp, None
+
+    def invalidate_otp(self, email):
+        cursor = self.db.cursor()
+        cursor.execute(
+            """UPDATE password_reset_otps SET used=1
+               WHERE user_id=(SELECT user_id FROM users WHERE email=?) AND used=0""",
+            (email,),
+        )
+        self.db.commit()
 
     def verify_otp(self, email, otp):
         """Returns (ok, message, otp_hash). The hash (never the raw code) backs the
@@ -194,18 +263,43 @@ class UserDAO:
         user = cursor.fetchone()
         if not user:
             return False, "No account found with that email address.", None
+        cursor.execute("BEGIN IMMEDIATE")
         cursor.execute(
-            """SELECT id, otp_hash, expires_at FROM password_reset_otps
+            """SELECT id, otp_hash, expires_at, verified, attempts FROM password_reset_otps
                WHERE user_id=? AND used=0 ORDER BY id DESC LIMIT 1""",
             (user["user_id"],),
         )
         record = cursor.fetchone()
         if not record:
+            self.db.rollback()
             return False, "No active verification code. Please request a new one.", None
-        if not hmac.compare_digest(record["otp_hash"], hashlib.sha256(str(otp).encode()).hexdigest()):
-            return False, "That verification code is incorrect.", None
         if datetime.now() > datetime.strptime(record["expires_at"], "%Y-%m-%d %H:%M:%S"):
+            cursor.execute("UPDATE password_reset_otps SET used=1 WHERE id=?", (record["id"],))
+            self.db.commit()
             return False, "That verification code has expired. Please request a new one.", None
+        if record["verified"]:
+            self.db.rollback()
+            return False, "That verification code has already been used. Continue resetting your password.", None
+        if record["attempts"] >= OTP_MAX_VERIFICATION_ATTEMPTS:
+            cursor.execute("UPDATE password_reset_otps SET used=1 WHERE id=?", (record["id"],))
+            self.db.commit()
+            return False, "Too many incorrect attempts. Please request a new code.", None
+        try:
+            is_correct = check_password_hash(record["otp_hash"], str(otp))
+        except ValueError:
+            is_correct = False
+        if not is_correct:
+            attempts = record["attempts"] + 1
+            cursor.execute(
+                "UPDATE password_reset_otps SET attempts=?, used=? WHERE id=?",
+                (attempts, int(attempts >= OTP_MAX_VERIFICATION_ATTEMPTS), record["id"]),
+            )
+            self.db.commit()
+            if attempts >= OTP_MAX_VERIFICATION_ATTEMPTS:
+                return False, "Too many incorrect attempts. Please request a new code.", None
+            return False, "That verification code is incorrect.", None
+        cursor.execute("UPDATE password_reset_otps SET verified=1 WHERE id=?", (record["id"],))
+        self.db.commit()
         return True, "OTP verified.", record["otp_hash"]
 
     def reset_password_with_hash(self, email, otp_hash, new_password):
@@ -215,15 +309,18 @@ class UserDAO:
         user = cursor.fetchone()
         if not user:
             return False, "No account found with that email address."
+        cursor.execute("BEGIN IMMEDIATE")
         cursor.execute(
             """SELECT id, expires_at FROM password_reset_otps
-               WHERE user_id=? AND used=0 AND otp_hash=? ORDER BY id DESC LIMIT 1""",
+               WHERE user_id=? AND used=0 AND verified=1 AND otp_hash=? ORDER BY id DESC LIMIT 1""",
             (user["user_id"], otp_hash),
         )
         record = cursor.fetchone()
         if not record:
+            self.db.rollback()
             return False, "That verification code is invalid or was already used."
         if datetime.now() > datetime.strptime(record["expires_at"], "%Y-%m-%d %H:%M:%S"):
+            self.db.rollback()
             return False, "That verification code has expired. Please request a new one."
         cursor.execute("UPDATE users SET password=? WHERE email=?", (self._hash_password(new_password), email))
         cursor.execute("UPDATE password_reset_otps SET used=1 WHERE id=?", (record["id"],))
@@ -232,20 +329,10 @@ class UserDAO:
         return True, "Password reset successfully. You can sign in now."
 
     def reset_password_with_otp(self, email, otp, new_password):
-        ok, message, _otp_hash = self.verify_otp(email, otp)
+        ok, message, otp_hash = self.verify_otp(email, otp)
         if not ok:
             return False, message
-        cursor = self.db.cursor()
-        cursor.execute("SELECT user_id, name FROM users WHERE email=?", (email,))
-        user = cursor.fetchone()
-        cursor.execute("UPDATE users SET password=? WHERE email=?", (self._hash_password(new_password), email))
-        cursor.execute(
-            "UPDATE password_reset_otps SET used=1 WHERE user_id=? AND used=0",
-            (user["user_id"],),
-        )
-        self.db.commit()
-        self.log_activity(user["user_id"], user["name"], "PASSWORD_RESET", "Password reset using OTP successfully")
-        return True, "Password reset successfully. You can sign in now."
+        return self.reset_password_with_hash(email, otp_hash, new_password)
 
     # --- Activity logs ---
     def log_activity(self, user_id, user_name, action, details):

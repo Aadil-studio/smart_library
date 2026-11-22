@@ -11,6 +11,7 @@ from uuid import uuid4
 
 import httpx
 from fastapi import APIRouter, Depends, Query, Request
+from fastapi.responses import FileResponse
 
 from routes import (admin_required, fail, get_controller, json_body, login_required,
                     ok, parse_float, parse_int, require_fields, staff_required)
@@ -26,6 +27,9 @@ COVER_TYPES = {
 COVER_LOOKUP_CACHE = {}
 COVER_LOOKUP_CACHE_TTL = 60 * 60 * 24
 NEGATIVE_COVER_CACHE_TTL = 60 * 15
+COVER_FILE_CACHE_TTL = 60 * 60 * 24 * 7
+COVER_FILE_CACHE = {}
+COVER_FILE_NEGATIVE_CACHE = {}
 GOOGLE_BOOKS_COOLDOWN_UNTIL = 0
 OPEN_LIBRARY_COOLDOWN_UNTIL = 0
 OPEN_LIBRARY_REQUEST_LOCK = asyncio.Lock()
@@ -389,6 +393,8 @@ def valid_cover_url(value):
         return True
     if not isinstance(value, str) or len(value) > 2048:
         return False
+    if value.startswith("/api/books/cover/"):
+        return True
     if value.startswith("/uploads/book-covers/"):
         filename = value.rsplit("/", 1)[-1]
         return bool(filename) and Path(filename).name == filename and Path(filename).suffix.lower() in {
@@ -396,6 +402,113 @@ def valid_cover_url(value):
         }
     parsed = urlparse(value)
     return parsed.scheme == "https" and bool(parsed.netloc) and not parsed.username and not parsed.password
+
+
+def _cover_cache_path(book_id, source_url):
+    import hashlib
+    digest = hashlib.sha256(str(source_url).encode("utf-8")).hexdigest()[:16]
+    return BOOK_COVER_DIR / f"cache-{book_id}-{digest}.img"
+
+
+async def _download_cover(url):
+    async with httpx.AsyncClient(timeout=12.0, follow_redirects=True) as client:
+        async with client.stream(
+            "GET", url,
+            headers={"User-Agent": "NorthstarLibrary/1.0"},
+        ) as response:
+            if response.status_code != 200:
+                return None
+            content_type = response.headers.get("content-type", "").lower()
+            if not content_type.startswith("image/"):
+                return None
+            content = await response.aread()
+            if len(content) > MAX_COVER_BYTES:
+                return None
+            return content, content_type
+
+
+def _cover_extension(content, content_type):
+    if content.startswith(b"\xff\xd8\xff"):
+        return ".jpg"
+    if content.startswith(b"\x89PNG\r\n\x1a\n"):
+        return ".png"
+    if content.startswith(b"RIFF") and content[8:12] == b"WEBP":
+        return ".webp"
+    if content.startswith((b"GIF87a", b"GIF89a")):
+        return ".gif"
+    if content_type.startswith("image/jpeg"):
+        return ".jpg"
+    if content_type.startswith("image/png"):
+        return ".png"
+    if content_type.startswith("image/webp"):
+        return ".webp"
+    return ""
+
+
+@router.get("/cover/{book_id}")
+async def cached_book_cover(book_id: int, request: Request, user: dict = Depends(login_required)):
+    controller = get_controller(request)
+    book = controller.get_book(book_id)
+    if not book:
+        return fail("Book not found.", 404)
+
+    source_url = str(book.get("cover_url") or "").strip()
+    if source_url.startswith("/uploads/book-covers/"):
+        uploaded_path = (BOOK_COVER_DIR / Path(source_url).name).resolve()
+        if uploaded_path.parent == BOOK_COVER_DIR.resolve() and uploaded_path.exists():
+            return FileResponse(
+                uploaded_path,
+                headers={"Cache-Control": "public, max-age=604800", "X-Content-Type-Options": "nosniff"},
+            )
+        return fail("Cover unavailable.", 404)
+
+    cache_base = _cover_cache_path(book_id, source_url)
+    matching_cache = list(cache_base.parent.glob(f"{cache_base.stem}.*"))
+    if matching_cache:
+        cache_path = matching_cache[0]
+        if time.time() - cache_path.stat().st_mtime < COVER_FILE_CACHE_TTL:
+            return FileResponse(
+                cache_path,
+                headers={"Cache-Control": "public, max-age=604800", "X-Content-Type-Options": "nosniff"},
+            )
+
+    cached_until = COVER_FILE_NEGATIVE_CACHE.get(book_id)
+    if cached_until and cached_until > time.monotonic() and not source_url:
+        return fail("Cover unavailable.", 404)
+
+    candidates = [source_url] if source_url.startswith("https://") else []
+    looked_up, _ = await _find_verified_covers(
+        str(book.get("isbn") or ""),
+        str(book.get("title") or ""),
+        str(book.get("author") or ""),
+    )
+    candidates.extend(url for url in looked_up if url not in candidates)
+
+    for candidate in candidates:
+        try:
+            downloaded = await _download_cover(candidate)
+        except (httpx.HTTPError, ValueError):
+            downloaded = None
+        if not downloaded:
+            continue
+        content, content_type = downloaded
+        extension = _cover_extension(content, content_type)
+        if not extension:
+            continue
+        cache_path = _cover_cache_path(book_id, candidate).with_suffix(extension)
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        cache_path.write_bytes(content)
+        if not book.get("cover_url"):
+            controller.book_dao.set_cover_if_missing(book_id, candidate)
+        elif book["cover_url"] not in ("", None) and candidate != book["cover_url"]:
+            controller.book_dao.replace_cover_if_failed(book_id, candidate, [book["cover_url"]])
+        return FileResponse(
+            cache_path,
+            headers={"Cache-Control": "public, max-age=604800", "X-Content-Type-Options": "nosniff"},
+        )
+
+    COVER_FILE_NEGATIVE_CACHE[book_id] = time.monotonic() + NEGATIVE_COVER_CACHE_TTL
+    return fail("Cover unavailable.", 404)
 
 
 @router.get("")
@@ -411,6 +524,8 @@ async def list_books(request: Request, user: dict = Depends(login_required)):
         availability=request.query_params.get("availability", "").strip() or None,
         sort=sort,
     )
+    for book in books:
+        book["cover_url"] = f"/api/books/cover/{book['id']}"
     return ok(data={"books": books, "categories": controller.get_categories(),
                     "authors": controller.get_authors()})
 

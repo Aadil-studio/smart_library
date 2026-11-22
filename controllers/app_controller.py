@@ -35,7 +35,7 @@ class LibraryController:
         return self.user_dao.authenticate(credential, password)
 
     def generate_otp(self, email):
-        """Returns (True, otp) or (False, message). Delivery (email/dev mode) is handled by the auth route."""
+        """Returns (True, otp) or (False, message); the auth route handles delivery."""
         otp, error = self.user_dao.generate_otp(email)
         if error:
             return False, error

@@ -1,9 +1,45 @@
 """Administrator user management and the system-wide activity log."""
 from fastapi import APIRouter, Depends, Request
 
-from routes import (admin_required, fail, get_controller, json_body, ok)
+from routes import (admin_required, fail, get_controller, json_body, ok, password_problem,
+                    require_fields, valid_email)
 
 router = APIRouter(prefix="/api/users")
+
+
+@router.post("")
+async def create_user(request: Request, user: dict = Depends(admin_required)):
+    controller = get_controller(request)
+    data = await json_body(request)
+    error = require_fields(data, "user_id", "name", "email", "role", "password", "confirm_password")
+    if error:
+        return fail(error)
+    fields = ("user_id", "name", "email", "role", "password", "confirm_password")
+    if not all(isinstance(data[field], str) for field in fields):
+        return fail("User fields must be strings.")
+
+    user_id = data["user_id"].strip()
+    name = data["name"].strip()
+    email = data["email"].strip().lower()
+    role = data["role"].strip().lower()
+    password = data["password"]
+    if len(user_id) < 3 or len(user_id) > 20:
+        return fail("User ID must be between 3 and 20 characters.")
+    if len(name) < 3:
+        return fail("Name must contain at least 3 characters.")
+    if not valid_email(email):
+        return fail("Please enter a valid email address.")
+    if role not in ("student", "librarian"):
+        return fail("Role must be 'student' or 'librarian'.")
+    if password != data["confirm_password"]:
+        return fail("Passwords do not match.")
+    if problem := password_problem(password):
+        return fail(problem)
+
+    success, message = controller.register(user_id, name, email, password, role=role)
+    if not success:
+        return fail(message, 409)
+    return ok(data={"user": controller.get_user(user_id)}, message=f"{role.title()} account created.")
 
 
 @router.get("")

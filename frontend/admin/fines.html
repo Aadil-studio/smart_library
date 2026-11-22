@@ -6,6 +6,7 @@
     <meta name="theme-color" content="#0b1020">
     <title>Fines | Northstar Library</title>
     <link rel="stylesheet" href="../css/northstar.css">
+    <link rel="stylesheet" href="../css/admin-dashboard.css">
   </head>
   <body data-base="../">
     <div id="toast"></div>
@@ -15,10 +16,16 @@
         <a class="nav" href="dashboard.html">Dashboard</a>
         <a class="nav on" href="fines.html">Fines</a>
         <div style="flex:1"></div>
+        <div class="side-profile">
+          <a class="side-profile-trigger admin-profile-link" id="fines-side-profile-link" href="system-settings.html#profile-security" aria-label="Open profile and security">
+            <span class="avatar admin-portal-avatar" id="fines-side-avatar">S</span>
+            <span class="side-profile-info"><strong id="fines-side-name">System Admin</strong><small id="fines-side-role">Admin</small></span>
+          </a>
+        </div>
         <button class="nav" id="signout">Sign out</button>
       </aside>
       <main>
-        <div class="top"><h2>Fines</h2><div class="who"><span id="uname"></span><div class="av" id="uav"></div></div></div>
+        <div class="top"><h2>Fines</h2><a class="who admin-profile-link" id="fines-header-profile-link" href="system-settings.html#profile-security" aria-label="Open profile and security"><span id="uname"></span><span class="av admin-portal-avatar" id="uav">S</span></a></div>
         <div id="content" class="panel">Loading fines…</div>
       </main>
     </div>
@@ -32,6 +39,19 @@
         const target = document.getElementById("toast");
         target.textContent = message;
         target.style.display = "block";
+      };
+      const renderAvatar = (node, avatarUrl, fallback) => {
+        node.replaceChildren();
+        if (typeof avatarUrl === "string" && avatarUrl.startsWith("/uploads/avatars/")) {
+          const image = document.createElement("img");
+          image.className = "avatar-photo";
+          image.src = avatarUrl;
+          image.alt = "";
+          image.addEventListener("error", () => { node.textContent = fallback; }, { once: true });
+          node.append(image);
+        } else {
+          node.textContent = fallback;
+        }
       };
       async function request(path, options = {}) {
         const response = await fetch(path, {
@@ -50,9 +70,18 @@
       async function load() {
         try {
           const current = await request("/api/auth/me");
-          const meRole = current.data.user.role;
-          document.getElementById("uname").textContent = current.data.user.name;
-          document.getElementById("uav").textContent = current.data.user.name.charAt(0).toUpperCase();
+          const user = current.data.user;
+          const meRole = user.role;
+          const fallback = meRole === "admin" ? "S" : "L";
+          const displayName = meRole === "admin" && user.name === "System Administrator" ? "System Admin" : user.name;
+          document.getElementById("uname").textContent = displayName;
+          document.getElementById("fines-side-name").textContent = displayName;
+          document.getElementById("fines-side-role").textContent = meRole === "admin" ? "Admin Portal" : "Librarian";
+          const profileLink = meRole === "admin" ? "system-settings.html#profile-security" : "../librarian/profile.html";
+          document.getElementById("fines-header-profile-link").href = profileLink;
+          document.getElementById("fines-side-profile-link").href = profileLink;
+          renderAvatar(document.getElementById("uav"), user.avatar_url, fallback);
+          renderAvatar(document.getElementById("fines-side-avatar"), user.avatar_url, fallback);
           const result = await request("/api/fines");
           const fines = result.data.fines;
           const fees = await request("/api/fees");

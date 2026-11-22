@@ -10,6 +10,7 @@ const ICONS = {
   inbox: '<path d="M4 4h16l2 11h-6l-2 3h-4l-2-3H2L4 4Z"/><path d="M2 15v4a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-4"/>',
   users: '<path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="10" cy="7" r="4"/><path d="M20 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
   chart: '<path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-5 5"/>',
+  user: '<path d="M20 21a8 8 0 0 0-16 0"/><circle cx="12" cy="8" r="4"/>',
   shield: '<path d="M12 22s8-4 8-11V5l-8-3-8 3v6c0 7 8 11 8 11Z"/><path d="m9 12 2 2 4-4"/>',
   settings: '<path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z"/><path d="m19.4 15 .1.1 1.4 1.1-1.4 2.4-1.7-.7a8 8 0 0 1-1.4.8l-.3 1.8h-2.8l-.3-1.8a8 8 0 0 1-1.4-.8l-1.7.7-1.4-2.4 1.4-1.1a7 7 0 0 1 0-1.8l-1.4-1.1 1.4-2.4 1.7.7a8 8 0 0 1 1.4-.8l.3-1.8h2.8l.3 1.8a8 8 0 0 1 1.4.8l1.7-.7 1.4 2.4-1.4 1.1a7 7 0 0 1 0 1.7Z" transform="translate(-1 -1) scale(1.08)"/>',
   logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/>',
@@ -28,6 +29,8 @@ const ICONS = {
   "user-plus": '<path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="10" cy="7" r="4"/><path d="M19 8v6m-3-3h6"/>',
   check: '<path d="m5 12 4 4L19 6"/>',
   close: '<path d="m18 6-12 12M6 6l12 12"/>',
+  eye: '<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>',
+  "eye-off": '<path d="m3 3 18 18"/><path d="M10.6 10.6a2 2 0 0 0 2.8 2.8"/><path d="M9.9 5.2A10.7 10.7 0 0 1 12 5c6.4 0 10 7 10 7a14.8 14.8 0 0 1-3.1 3.8"/><path d="M6.6 6.6C3.7 8.5 2 12 2 12s3.6 7 10 7a10.7 10.7 0 0 0 3.3-.5"/>',
   activity: '<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>',
   clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
   warning: '<path d="m10.3 3.9-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.7-3.1l-8-14a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4m0 4h.01"/>',
@@ -61,7 +64,7 @@ const state = {
   user: null, dashboard: null, books: [], loans: [], requests: [], students: [], librarians: [],
   admins: [], fines: [], unpaidFees: [], overdue: [], notifications: [], activity: [], topBooks: [],
   period: "month", categorySort: "count", categoriesExpanded: false, showAllLoans: false,
-  searchTimer: null, toastTimer: null,
+  displayedLoans: [], searchTimer: null, toastTimer: null,
 };
 
 async function api(path, options = {}) {
@@ -86,11 +89,18 @@ async function api(path, options = {}) {
 
 function toast(message, isError = false) {
   const target = $("toast");
+  if (!target) return;
   target.textContent = message;
   target.classList.toggle("error", isError);
   target.style.display = "block";
   clearTimeout(state.toastTimer);
   state.toastTimer = setTimeout(() => { target.style.display = "none"; }, 3200);
+}
+
+function setButtonPending(button, pending) {
+  if (!button) return;
+  button.disabled = pending;
+  button.classList.toggle("button-loading", pending);
 }
 
 function setIcons(root = document) {
@@ -102,35 +112,71 @@ function setIcons(root = document) {
 function setUserChrome() {
   document.body.classList.add(state.user.role === "librarian" ? "role-librarian" : "role-admin");
   if (state.user.role === "admin" && $("librarian-workbench")) $("librarian-workbench").hidden = true;
-  const name = state.user.name || "Administrator";
-  const initial = name.trim().charAt(0).toUpperCase() || "A";
-  ["side-avatar", "header-avatar"].forEach((id) => { $(id).textContent = initial; });
-  $("side-name").textContent = name;
-  $("side-role").textContent = state.user.role || "Admin";
-  $("header-name").textContent = name;
-  $("header-role").textContent = state.user.role || "Admin";
-  $("menu-name").textContent = name;
-  $("menu-email").textContent = state.user.email || "";
-  $("welcome-name").textContent = name.trim().split(/\s+/)[0] || "Administrator";
+  const rawName = state.user.name || "Administrator";
+  const name = state.user.role === "librarian"
+    ? rawName.trim().toLowerCase().replace(/(^|[\s'-])([a-z])/g, (_, boundary, letter) => boundary + letter.toUpperCase())
+    : rawName;
+  const headerName = state.user.role === "admin" && name === "System Administrator" ? "System Admin" : name;
+  const initial = state.user.role === "admin" ? "S" : "L";
+  const profileTrigger = $(".side-profile-trigger");
+  if (profileTrigger) profileTrigger.disabled = false;
+  ["side-avatar", "header-avatar", "welcome-avatar"].forEach((id) => {
+    const avatar = $(id);
+    if (!avatar) return;
+    avatar.replaceChildren();
+    const avatarUrl = state.user.avatar_url;
+    if (typeof avatarUrl === "string" && avatarUrl.startsWith("/uploads/avatars/")) {
+      const image = document.createElement("img");
+      image.className = "avatar-photo";
+      image.src = avatarUrl;
+      image.alt = "";
+      image.addEventListener("error", () => { avatar.textContent = initial; }, { once: true });
+      avatar.append(image);
+    } else {
+      avatar.textContent = initial;
+    }
+  });
+  if ($("side-name")) $("side-name").textContent = headerName;
+  if ($("side-role")) $("side-role").textContent = state.user.role === "admin" ? "Admin Portal" : "Librarian";
+  if ($("header-name")) $("header-name").textContent = headerName;
+  if ($("header-role")) $("header-role").textContent = state.user.role === "admin" ? "Admin Portal" : "Librarian";
+  if ($("menu-name")) $("menu-name").textContent = headerName;
+  if ($("menu-email")) $("menu-email").textContent = state.user.email || "";
+  if ($("welcome-name")) $("welcome-name").textContent = state.user.role === "librarian"
+    ? "Librarian"
+    : state.user.role === "admin"
+      ? "Admin"
+      : name.trim().split(/\s+/)[0] || "Administrator";
   if (state.user.role === "librarian") {
-    document.querySelector(".page-heading h1").textContent = "Daily operations";
-    document.querySelector(".page-heading .page-subtitle").textContent = "Issue, return, and support the library desk.";
-    document.querySelector(".welcome-kicker").textContent = "Librarian control desk";
-    document.querySelector(".welcome-copy h2").innerHTML = `Welcome back, <span id="welcome-name">${esc(name.trim().split(/\s+/)[0] || "Librarian")}</span>!`;
-    document.querySelector(".welcome-copy p").textContent = "Keep circulation moving with live issues, returns, due dates, and member support.";
+    const heading = document.querySelector(".page-heading h1");
+    const subtitle = document.querySelector(".page-heading .page-subtitle");
+    const kicker = document.querySelector(".welcome-kicker");
+    const welcome = document.querySelector(".welcome-copy h2");
+    const welcomeCopy = document.querySelector(".welcome-copy p");
+    if (heading) heading.textContent = "Daily operations";
+    if (subtitle) subtitle.textContent = "Issue, return, and support the library desk.";
+    if (kicker) kicker.textContent = "Librarian control desk";
+    if (welcome) welcome.innerHTML = 'Welcome back, <span id="welcome-name">Librarian</span>!';
+    if (welcomeCopy) welcomeCopy.textContent = "Keep circulation moving with live issues, returns, due dates, and member support.";
   } else {
-    document.querySelector(".welcome-kicker").textContent = "Administration command center";
+    const kicker = document.querySelector(".welcome-kicker");
+    if (kicker) kicker.textContent = "Administration command center";
   }
   updateHeaderDate();
   if (state.user.role !== "admin") {
     document.querySelectorAll(".admin-only").forEach((item) => item.remove());
   }
-  $("sidebar-status").textContent = "Live database connection";
-  $("connection-label").textContent = "Live";
+  if (state.user.role !== "librarian") {
+    document.querySelectorAll(".librarian-only").forEach((item) => item.remove());
+  }
+  if ($("sidebar-status")) $("sidebar-status").textContent = "";
+  if ($("connection-label")) $("connection-label").textContent = "Online";
 }
 
 function updateHeaderDate() {
-  $("header-date").textContent = new Date().toLocaleString(undefined, {
+  const headerDate = $("header-date");
+  if (!headerDate) return;
+  headerDate.textContent = new Date().toLocaleString(undefined, {
     weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
   });
 }
@@ -181,8 +227,10 @@ async function loadData() {
   return true;
 }
 
-function statCard(label, value, caption, icon, accent) {
-  return `<article class="stat-card" style="--stat-accent:${accent}"><div class="stat-top"><span class="stat-label">${label}</span><span class="stat-icon">${svg(icon)}</span></div><strong class="stat-value">${value}</strong><div class="stat-foot"><i class="mini-dot"></i>${caption}</div></article>`;
+function statCard(label, value, caption, icon, accent, action = "") {
+  const classes = `stat-card${action ? " stat-action" : ""}`;
+  const actionAttributes = action ? ` role="button" tabindex="0" data-action="${action}"` : "";
+  return `<article class="${classes}"${actionAttributes} style="--stat-accent:${accent}"><div class="stat-top"><span class="stat-label">${label}</span><span class="stat-icon">${svg(icon)}</span></div><strong class="stat-value">${value}</strong><div class="stat-foot"><i class="mini-dot"></i>${caption}</div></article>`;
 }
 
 function renderLibrarianWorkbench() {
@@ -190,24 +238,9 @@ function renderLibrarianWorkbench() {
   if (!workbench) return;
   workbench.hidden = false;
 
-  const today = localDateKey(new Date());
-  const issuedToday = state.loans.filter((loan) => String(loan.issue_date || "").slice(0, 10) === today).length;
-  const returnedToday = state.loans.filter((loan) => String(loan.return_date || "").slice(0, 10) === today).length;
-  const dueToday = state.loans.filter((loan) => ["issued", "overdue"].includes(String(loan.status)) && String(loan.due_date || "").slice(0, 10) === today).length;
-  const todayDate = dateOnly(today);
-  const upcomingReturns = state.loans.filter((loan) => {
-    if (!["issued", "overdue"].includes(String(loan.status))) return false;
-    const due = dateOnly(loan.due_date);
-    if (!due || !todayDate) return false;
-    const days = Math.round((due - todayDate) / 86400000);
-    return days > 0 && days <= 7;
-  }).length;
-  const overdueCount = state.overdue.length;
-  $("operations-today").innerHTML = `<div class="panel-heading"><div><p class="eyebrow">LIVE DESK</p><h3>Today's circulation</h3></div><span class="panel-icon">${svg("activity")}</span></div><div class="operation-metrics"><div class="operation-metric accent-violet"><strong>${issuedToday}</strong><small>Issued today</small></div><div class="operation-metric accent-green"><strong>${returnedToday}</strong><small>Returned today</small></div><div class="operation-metric accent-blue"><strong>${dueToday}</strong><small>Due today</small></div><div class="operation-metric accent-blue"><strong>${upcomingReturns}</strong><small>Due in 7 days</small></div><div class="operation-metric accent-red"><strong>${overdueCount}</strong><small>Overdue</small></div></div>`;
-
   renderMemberResults("");
   const unpaidFines = state.fines.filter((fine) => fine.status === "unpaid").slice(0, 8);
-  $("fine-workbench-count").textContent = unpaidFines.length;
+  $("fine-workbench-count").textContent = state.fines.filter((fine) => fine.status === "unpaid").length;
   $("fine-workbench-list").innerHTML = unpaidFines.length ? unpaidFines.map((fine) => `<div class="fine-row"><div class="fine-row-copy"><strong>${esc(fine.student_name || fine.student_id)}</strong><small>${esc(fine.book_title || "Library fine")} · ${money(fine.amount)}</small></div><button data-fine-collect="${numeric(fine.id)}">Collect</button></div>`).join("") : '<div class="no-data">No unpaid fine records.</div>';
   setIcons(workbench);
 
@@ -223,35 +256,24 @@ function renderMemberResults(term) {
   const matches = state.students.filter((member) =>
     `${member.name || ""} ${member.user_id || ""} ${member.email || ""}`.toLowerCase().includes(normalized)
   ).slice(0, 6);
-  $("member-results").innerHTML = matches.length ? matches.map((member) => `<div class="member-result"><div class="member-result-copy"><strong>${esc(member.name || member.user_id)}</strong><small>${esc(member.user_id)} · ${numeric(member.borrowed_count)} active · ${member.status}</small></div><button data-member-details="${esc(member.user_id)}">View</button></div>`).join("") : '<div class="no-data">No members match this search.</div>';
+  $("member-results").innerHTML = matches.length ? matches.map((member) => `<div class="member-result"><div class="member-result-copy"><strong class="student-name">${esc(member.name || member.user_id)}</strong><small>${esc(member.user_id)} · ${numeric(member.borrowed_count)} active · ${esc(member.status)}</small></div><button data-member-details="${esc(member.user_id)}">View</button></div>`).join("") : '<div class="no-data">No members match this search.</div>';
 }
 
 function renderStats() {
   const summary = state.dashboard.stats || {};
   if (state.user.role === "librarian") {
-    const today = localDateKey(new Date());
-    const issuedToday = state.loans.filter((loan) => String(loan.issue_date || "").slice(0, 10) === today).length;
-    const returnedToday = state.loans.filter((loan) => String(loan.return_date || "").slice(0, 10) === today).length;
     const activeLoans = state.loans.filter((loan) => ["issued", "overdue"].includes(String(loan.status))).length;
-    const dueToday = state.loans.filter((loan) => ["issued", "overdue"].includes(String(loan.status)) && String(loan.due_date || "").slice(0, 10) === today).length;
-    const unpaidFines = state.fines.filter((fine) => fine.status === "unpaid");
-    const pendingFineAmount = unpaidFines.reduce((sum, fine) => sum + numeric(fine.amount), 0);
     const lowStockCount = state.books.filter((book) => numeric(book.available_copies) <= 1).length;
     const stats = [
-      ["Issued today", issuedToday, "Books issued at the desk", "repeat", "#9caaff"],
-      ["Returned today", returnedToday, "Returns completed today", "check", "#54d6a0"],
-      ["Due today", dueToday, "Members due to return", "calendar", "#77a7ff"],
-      ["Overdue", state.overdue.length, "Items needing attention", "warning", "#ff8792"],
-      ["Pending requests", state.requests.length, "Borrow approvals waiting", "inbox", "#b39aff"],
-      ["Active loans", activeLoans, "Currently in circulation", "repeat", "#73b9f1"],
-      ["Pending fines", money(pendingFineAmount), `${unpaidFines.length} unpaid record${unpaidFines.length === 1 ? "" : "s"}`, "coin", "#edc778"],
-      ["Low-stock titles", lowStockCount, "One or zero copies available", "book", "#ff9b79"],
+      ["Active Loans", activeLoans, "Currently in circulation", "repeat", "#73b9f1"],
+      ["Pending Requests", state.requests.length, "Borrow approvals waiting", "inbox", "#b39aff", "show-requests"],
+      ["Overdue Books", state.overdue.length, "Filter recent loans", "warning", "#ff8792", "show-overdue"],
+      ["Low-Stock Titles", lowStockCount, "One or fewer copies available", "book", "#ff9b79", "stock-alert"],
     ];
     $("stats-grid").innerHTML = stats.map((item) => statCard(...item)).join("");
     $("request-nav-count").textContent = state.requests.length;
     $("pending-count").textContent = state.requests.length;
     $("overdue-count").textContent = state.overdue.length;
-    $("last-updated").textContent = `Updated ${new Date().toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })} · Live library desk data`;
     renderLibrarianWorkbench();
     return;
   }
@@ -277,7 +299,6 @@ function renderStats() {
   $("request-nav-count").textContent = state.requests.length;
   $("pending-count").textContent = state.requests.length;
   $("overdue-count").textContent = state.overdue.length;
-  $("last-updated").textContent = `Updated ${new Date().toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })} · Live database records`;
 }
 
 function periodBuckets() {
@@ -416,6 +437,7 @@ function renderLoans() {
   const status = $("loan-status").value;
   const matches = state.loans.filter((loan) => loanMatches(loan, term, status));
   const results = state.showAllLoans ? matches : matches.slice(0, 8);
+  state.displayedLoans = results;
   const allButton = document.querySelector('[data-action="show-all-loans"]');
   if (allButton) allButton.innerHTML = `${state.showAllLoans ? "Show recent loans" : `View all loans (${matches.length})`} ${svg("arrow")}`;
   $("loans-body").innerHTML = results.length ? results.map((loan) => {
@@ -423,13 +445,73 @@ function renderLoans() {
     const statusClass = String(loan.status || "").toLowerCase();
     const canReturn = ["issued", "overdue"].includes(statusClass);
     const hue = [...title].reduce((sum, char) => sum + char.charCodeAt(0) * 7, 0) % 360;
-    return `<tr><td title="${esc(title)}"><div class="book-cell"><span class="book-thumb" style="background:linear-gradient(145deg,hsl(${hue} 52% 43%),hsl(${(hue + 48) % 360} 45% 21%))">${esc(title.slice(0,1).toUpperCase())}</span><span class="book-copy"><strong title="${esc(title)}">${esc(title)}</strong><small>${esc(loan.book_author || "Author not recorded")}</small></span></div></td><td><span class="member-cell"><strong title="${esc(loan.student_name || loan.student_id)}">${esc(loan.student_name || loan.student_id || "Member")}</strong><small>${esc(loan.student_id || "")}</small></span></td><td>${dateLabel(loan.issue_date,{day:"numeric",month:"short",year:"2-digit"})}</td><td>${dateLabel(loan.due_date,{day:"numeric",month:"short",year:"2-digit"})}</td><td>${dateLabel(loan.return_date,{day:"numeric",month:"short",year:"2-digit"})}</td><td>${statusPill(statusClass)}</td><td>${canReturn ? `<button class="table-action" data-return-loan="${numeric(loan.id)}">Return</button>` : "—"}</td></tr>`;
+    return `<tr><td title="${esc(title)}"><div class="book-cell"><span class="book-thumb" style="background:linear-gradient(145deg,hsl(${hue} 52% 43%),hsl(${(hue + 48) % 360} 45% 21%))">${esc(title.slice(0,1).toUpperCase())}</span><span class="book-copy"><strong title="${esc(title)}">${esc(title)}</strong><small>${esc(loan.book_author || "Author not recorded")}</small></span></div></td><td><span class="member-cell"><strong class="student-name" title="${esc(loan.student_name || loan.student_id)}">${esc(loan.student_name || loan.student_id || "Member")}</strong><small>${esc(loan.student_id || "")}</small></span></td><td>${dateLabel(loan.issue_date,{day:"numeric",month:"short",year:"2-digit"})}</td><td>${dateLabel(loan.due_date,{day:"numeric",month:"short",year:"2-digit"})}</td><td>${dateLabel(loan.return_date,{day:"numeric",month:"short",year:"2-digit"})}</td><td>${statusPill(statusClass)}</td><td>${canReturn ? `<button class="table-action" data-return-loan="${numeric(loan.id)}">Return</button>` : "—"}</td></tr>`;
   }).join("") : '<tr><td colspan="7" class="empty-cell">No loans match these filters.</td></tr>';
+}
+
+function csvCell(value) {
+  let text = String(value ?? "");
+  if (/^[\t\r ]*[=+\-@]/.test(text)) text = `'${text}`;
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
+function exportLoansCsv() {
+  const loans = state.displayedLoans;
+  if (!loans.length) {
+    toast("There are no displayed loans to export.", true);
+    return;
+  }
+  const rows = [
+    ["Book", "Author", "Member", "Student ID", "Issued", "Due date", "Returned", "Status"],
+    ...loans.map((loan) => [
+      loan.book_title,
+      loan.book_author,
+      loan.student_name,
+      loan.student_id,
+      loan.issue_date,
+      loan.due_date,
+      loan.return_date,
+      loan.status,
+    ]),
+  ];
+  const csv = `\uFEFF${rows.map((row) => row.map(csvCell).join(",")).join("\r\n")}`;
+  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `northstar-loans-${localDateKey(new Date())}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  toast(`Exported ${loans.length} displayed loan${loans.length === 1 ? "" : "s"} to CSV.`);
 }
 
 function renderRequests() {
   const rows = state.requests.slice(0, 5);
-  $("request-list").innerHTML = rows.length ? rows.map((request) => `<div class="request-row"><div class="request-info"><strong title="${esc(request.student_name || request.student_id)}">${esc(request.student_name || request.student_id)}</strong><small title="${esc(request.book_title)}">${esc(request.book_title)} · ${dateLabel(request.request_date,{day:"numeric",month:"short"})}</small></div><div class="request-actions"><button data-request-details="${numeric(request.id)}">Details</button><button class="approve-request" data-request-action="approve" data-request-id="${numeric(request.id)}">Approve</button><button class="reject-request" data-request-action="reject" data-request-id="${numeric(request.id)}">Reject</button></div></div>`).join("") : '<div class="no-data">No pending borrowing requests.</div>';
+  $("request-list").innerHTML = rows.length ? rows.map(requestRowMarkup).join("") : '<div class="no-data">No pending borrowing requests.</div>';
+}
+
+function requestRowMarkup(request) {
+  return `<div class="request-row"><div class="request-info"><strong class="student-name" title="${esc(request.student_name || request.student_id)}">${esc(request.student_name || request.student_id)}</strong><small title="${esc(request.book_title)}">${esc(request.book_title)} · ${dateLabel(request.request_date,{day:"numeric",month:"short"})}</small></div><div class="request-actions"><button data-request-details="${numeric(request.id)}">Details</button><button class="approve-request" data-request-action="approve" data-request-id="${numeric(request.id)}">Approve</button><button class="reject-request" data-request-action="reject" data-request-id="${numeric(request.id)}">Reject</button></div></div>`;
+}
+
+function showRequestsModal() {
+  const rows = state.requests.length
+    ? state.requests.map(requestRowMarkup).join("")
+    : '<div class="no-data">No pending borrowing requests.</div>';
+  showModal("Pending requests", `${state.requests.length} request${state.requests.length === 1 ? "" : "s"} awaiting review.`, `<div class="request-list request-modal-list">${rows}</div>`);
+}
+
+function showIssueReturnModal() {
+  showModal("Issue or return a book", "Choose a circulation action to continue.", `<div class="issue-return-actions"><button class="button button-violet" data-action="issue-book">${svg("repeat")}Issue Book</button><button class="button button-blue" data-action="return-book">${svg("check")}Return Book</button></div>`);
+}
+
+function showFineDesk() {
+  const unpaid = state.fines.filter((fine) => fine.status === "unpaid");
+  const rows = unpaid.length
+    ? unpaid.map((fine) => `<div class="fine-row"><div class="fine-row-copy"><strong class="student-name">${esc(fine.student_name || fine.student_id)}</strong><small>${esc(fine.book_title || "Library fine")} · ${money(fine.amount)}</small></div><button data-fine-collect="${numeric(fine.id)}">Collect</button></div>`).join("")
+    : '<div class="no-data">No unpaid fine records.</div>';
+  showModal("Cash desk", `${unpaid.length} unpaid fine record${unpaid.length === 1 ? "" : "s"}.`, `<div class="fine-desk-list">${rows}</div>`);
 }
 
 function renderOverdue() {
@@ -471,27 +553,28 @@ function buildActivity() {
   state.activity.forEach((entry) => {
     const action = String(entry.action || "").toUpperCase();
     const kind = action.includes("RETURN") ? "check" : action.includes("FINE") || action.includes("FEE") ? "coin" : action.includes("BORROW") || action.includes("ISSUE") ? "repeat" : action.includes("USER") || action.includes("REGISTER") ? "user-plus" : "activity";
-    events.push(activityEntry(kind, entry.details || action.replaceAll("_"," ").toLowerCase(), entry.user_name || entry.user_id || "Library staff", entry.timestamp));
+    const isStudent = state.students.some((member) => member.user_id === entry.user_id);
+    events.push(activityEntry(kind, entry.details || action.replaceAll("_"," ").toLowerCase(), entry.user_name || entry.user_id || "Library staff", entry.timestamp, isStudent && entry.user_name ? "student-name" : ""));
   });
   state.loans.slice(0, 8).forEach((loan) => {
     const isReturned = loan.status === "returned";
-    events.push(activityEntry(isReturned ? "check" : "repeat", `${isReturned ? "Book returned" : "Book issued"}: ${loan.book_title}`, loan.student_name || loan.student_id, isReturned ? loan.return_date : loan.issue_date));
+    events.push(activityEntry(isReturned ? "check" : "repeat", `${isReturned ? "Book returned" : "Book issued"}: ${loan.book_title}`, loan.student_name || loan.student_id, isReturned ? loan.return_date : loan.issue_date, loan.student_name ? "student-name" : ""));
   });
   state.students.slice(0, 5).forEach((member) => {
-    events.push(activityEntry("user-plus", "New student registration", member.name || member.user_id, member.created_at));
+    events.push(activityEntry("user-plus", "New student registration", member.name || member.user_id, member.created_at, member.name ? "student-name" : ""));
   });
   state.requests.slice(0, 5).forEach((request) => {
-    events.push(activityEntry("inbox", `Borrow request: ${request.book_title}`, request.student_name || request.student_id, request.request_date));
+    events.push(activityEntry("inbox", `Borrow request: ${request.book_title}`, request.student_name || request.student_id, request.request_date, request.student_name ? "student-name" : ""));
   });
   state.fines.filter((fine) => fine.payment_date).slice(0, 4).forEach((fine) => {
-    events.push(activityEntry("coin", `Fine payment: ${money(fine.amount)}`, fine.student_name || fine.student_id, fine.payment_date));
+    events.push(activityEntry("coin", `Fine payment: ${money(fine.amount)}`, fine.student_name || fine.student_id, fine.payment_date, fine.student_name ? "student-name" : ""));
   });
   return events.filter((event) => event.timestamp).sort((a,b) => new Date(String(b.timestamp).replace(" ","T")) - new Date(String(a.timestamp).replace(" ","T"))).slice(0, 7);
 }
 
 function renderActivity() {
   const events = buildActivity();
-  $("activity-list").innerHTML = events.length ? events.map((event) => `<div class="activity-row"><span class="activity-icon">${svg(event.icon)}</span><span class="activity-copy"><p>${esc(event.description)}</p><small>${esc(event.detail)} · ${esc(dateTimeLabel(event.timestamp))}</small></span></div>`).join("") : '<div class="no-data">Activity will appear here as operations are recorded.</div>';
+  $("activity-list").innerHTML = events.length ? events.map((event) => `<div class="activity-row"><span class="activity-icon">${svg(event.icon)}</span><span class="activity-copy"><p>${esc(event.description)}</p><small class="${event.tone}">${esc(event.detail)} · ${esc(dateTimeLabel(event.timestamp))}</small></span></div>`).join("") : '<div class="no-data">Activity will appear here as operations are recorded.</div>';
 }
 
 function renderInsights() {
@@ -520,7 +603,7 @@ function renderInsights() {
     mostActive ? ["users", "Most active member", mostActive.name, `${mostActive.count} recorded loans`] : ["users", "Most active member", "No loan history", "No loan records yet"],
     ["trending", "Monthly borrowing", `${currentBorrowing} issues this month`, `${previousBorrowing} issue${previousBorrowing === 1 ? "" : "s"} last month`],
   ];
-  $("insights-list").innerHTML = items.map(([icon,title,value,detail]) => `<div class="insight-row"><span class="insight-mark">${svg(icon)}</span><span class="insight-copy"><small>${esc(title)}</small><strong title="${esc(value)}">${esc(value)}</strong><small>${esc(detail)}</small></span></div>`).join("");
+  $("insights-list").innerHTML = items.map(([icon,title,value,detail]) => `<div class="insight-row"><span class="insight-mark">${svg(icon)}</span><span class="insight-copy"><small>${esc(title)}</small><strong class="${title === "Most active member" && mostActive ? "student-name" : ""}" title="${esc(value)}">${esc(value)}</strong><small>${esc(detail)}</small></span></div>`).join("");
 }
 
 function renderAlerts() {
@@ -580,12 +663,126 @@ function closeModal() {
   $("modal-content").innerHTML = "";
 }
 
-function showModal(title, description, body) {
-  $("modal-content").innerHTML = `<h2 class="modal-title" id="modal-title">${esc(title)}</h2><p class="modal-description">${esc(description)}</p>${body}`;
+function showModal(title, description, body, headerAction = "") {
+  const heading = headerAction
+    ? `<div class="modal-heading-row"><h2 class="modal-title" id="modal-title">${esc(title)}</h2>${headerAction}</div><p class="modal-description">${esc(description)}</p>`
+    : `<h2 class="modal-title" id="modal-title">${esc(title)}</h2><p class="modal-description">${esc(description)}</p>`;
+  $("modal-content").innerHTML = `${heading}${body}`;
   $("modal-backdrop").hidden = false;
   setIcons($("modal-content"));
   const first = $("modal-content").querySelector("input,select,button");
   if (first) first.focus();
+}
+
+async function openLibrarianProfile() {
+  if (!state.user || state.user.role !== "librarian") return;
+  showModal(
+    "Librarian Profile",
+    "Update your account details and password.",
+    '<div class="profile-loading">Loading your profile…</div>',
+  );
+  try {
+    const result = await api("/librarian/profile");
+    renderLibrarianProfile(result.data.profile);
+  } catch (error) {
+    closeModal();
+    toast(error.message, true);
+  }
+}
+
+function renderLibrarianProfile(profile) {
+  showModal(
+    "Librarian Profile",
+    "Manage the details and sign-in credentials for your Library Desk account.",
+    `<div class="profile-settings-grid">
+      <section class="profile-settings-section">
+        <div class="profile-settings-heading"><span class="profile-settings-icon">${svg("users")}</span><div><h3>Account Details</h3><p>Keep your contact details up to date.</p></div></div>
+        <form class="modal-form profile-settings-form" id="librarian-profile-form">
+          <label>Full / Display Name<input name="name" type="text" required maxlength="120" autocomplete="name" value="${esc(profile.name)}"></label>
+          <label>Email (Gmail)<input name="email" type="email" required maxlength="254" autocomplete="email" value="${esc(profile.email)}"></label>
+          <div class="profile-role-row"><span>Role</span><span class="profile-role-badge">${svg("shield")}Librarian</span></div>
+          <button class="button button-gold" type="submit">Save Account Details</button>
+        </form>
+      </section>
+      <section class="profile-settings-section">
+        <div class="profile-settings-heading"><span class="profile-settings-icon">${svg("shield")}</span><div><h3>Change Password</h3><p>Choose a password with at least 6 characters.</p></div></div>
+        <form class="modal-form profile-settings-form" id="librarian-password-form">
+          ${passwordField("Current Password", "current_password", "current-password")}
+          ${passwordField("New Password", "new_password", "new-password", true)}
+          ${passwordField("Confirm New Password", "confirm_password", "confirm-new-password", true)}
+          <button class="button button-violet" type="submit">Update Password</button>
+        </form>
+      </section>
+    </div>`,
+  );
+
+  const profileForm = $("librarian-profile-form");
+  if (profileForm) profileForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const button = profileForm.querySelector('[type="submit"]');
+    setButtonPending(button, true);
+    try {
+      const result = await api("/librarian/profile", {
+        method: "PUT",
+        body: JSON.stringify({
+          name: profileForm.elements.namedItem("name").value,
+          email: profileForm.elements.namedItem("email").value,
+        }),
+      });
+      state.user = { ...state.user, ...result.data.profile };
+      setUserChrome();
+      toast(result.message || "Account details saved.");
+    } catch (error) {
+      toast(error.message, true);
+    } finally {
+      setButtonPending(button, false);
+    }
+  });
+
+  const passwordForm = $("librarian-password-form");
+  if (passwordForm) passwordForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (passwordForm.elements.namedItem("new_password").value !== passwordForm.elements.namedItem("confirm_password").value) {
+      toast("New passwords do not match.", true);
+      return;
+    }
+    if (passwordForm.elements.namedItem("new_password").value.length < 6) {
+      toast("New password must be at least 6 characters long.", true);
+      return;
+    }
+    const button = passwordForm.querySelector('[type="submit"]');
+    setButtonPending(button, true);
+    try {
+      const result = await api("/librarian/change-password", {
+        method: "POST",
+        body: JSON.stringify({
+          current_password: passwordForm.elements.namedItem("current_password").value,
+          new_password: passwordForm.elements.namedItem("new_password").value,
+          confirm_password: passwordForm.elements.namedItem("confirm_password").value,
+        }),
+      });
+      passwordForm.reset();
+      toast(result.message || "Password updated successfully.");
+    } catch (error) {
+      toast(error.message, true);
+    } finally {
+      setButtonPending(button, false);
+    }
+  });
+
+  $("modal-content").querySelectorAll("[data-password-toggle]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const input = $(button.dataset.passwordToggle);
+      const show = input.type === "password";
+      input.type = show ? "text" : "password";
+      button.innerHTML = svg(show ? "eye-off" : "eye");
+      button.setAttribute("aria-label", show ? "Hide password" : "Show password");
+    });
+  });
+}
+
+function passwordField(label, name, id, minimumLength = false) {
+  return `<label>${label}<span class="password-field"><input id="${id}" name="${name}" type="password" ${minimumLength ? 'minlength="6"' : ""} required autocomplete="${name === "current_password" ? "current-password" : "new-password"}"><button class="password-toggle" type="button" data-password-toggle="${id}" aria-label="Show password">${svg("eye")}</button></span></label>`;
 }
 
 function attachCoverPreview(form) {
@@ -702,13 +899,32 @@ function showCatalog(stockOnly = false) {
   const catalog = stockOnly
     ? state.books.filter((book) => numeric(book.available_copies) <= 1)
     : state.books;
-  const rows = catalog.slice(0, 40).map((book) => catalogRow(book)).join("");
-  showModal(stockOnly ? "Low-stock titles" : "Manage books", `${catalog.length} ${stockOnly ? "titles have one or fewer available copies" : "titles in the live catalog"}. Edit title details or remove a title that is no longer needed.`, `<div class="table-search" style="margin-bottom:12px"><span>${svg("search")}</span><input id="catalog-search" type="search" placeholder="Filter books…" aria-label="Filter books"></div><div class="request-list" id="catalog-list">${rows || '<div class="no-data">No matching titles in the catalog.</div>'}</div><div class="report-actions"><button class="button button-gold" data-action="catalog-add">${svg("plus")}Add a book</button></div>`);
-  $("modal-content").querySelector("#catalog-search").addEventListener("input", (event) => {
-    const term = event.target.value.trim().toLowerCase();
-    $("catalog-list").innerHTML = catalog.filter((book) => `${book.title} ${book.author} ${book.isbn} ${book.category}`.toLowerCase().includes(term)).slice(0,40).map(catalogRow).join("") || '<div class="no-data">No books match your search.</div>';
-  });
-  setIcons($("modal-content"));
+  const categories = [...new Set(catalog.map((book) => String(book.category || "Uncategorized")))]
+    .sort((left, right) => left.localeCompare(right));
+  const categoryOptions = categories.map((category) => `<option value="${esc(category)}">${esc(category)}</option>`).join("");
+  const headerAction = stockOnly ? "" : `<button class="button button-gold catalog-add-top" data-action="catalog-add">${svg("plus")}Add New Book</button>`;
+  showModal(
+    stockOnly ? "Low-stock titles" : "Manage books",
+    `${catalog.length} ${stockOnly ? "titles have one or fewer available copies" : "titles in the live catalog"}. Edit title details or remove a title that is no longer needed.`,
+    `<div class="catalog-filter-toolbar"><div class="table-search"><span>${svg("search")}</span><input id="catalog-search" type="search" placeholder="Filter books…" aria-label="Filter books"></div><select id="catalog-category" aria-label="Filter books by category"><option value="">All categories</option>${categoryOptions}</select></div><div class="catalog-list" id="catalog-list"></div>`,
+    headerAction,
+  );
+  const search = $("catalog-search");
+  const categoryFilter = $("catalog-category");
+  const renderCatalogRows = () => {
+    const term = search.value.trim().toLowerCase();
+    const category = categoryFilter.value;
+    const matches = catalog.filter((book) =>
+      (!category || String(book.category || "Uncategorized") === category) &&
+      `${book.title} ${book.author} ${book.isbn || ""} ${book.category || ""}`.toLowerCase().includes(term),
+    ).slice(0, 40);
+    $("catalog-list").innerHTML = matches.map(catalogRow).join("") || '<div class="no-data">No books match these filters.</div>';
+    window.NorthstarBookCovers.hydrate($("catalog-list"), matches);
+  };
+  search.addEventListener("input", renderCatalogRows);
+  categoryFilter.addEventListener("change", renderCatalogRows);
+  search.focus();
+  renderCatalogRows();
 }
 
 function showRequestDetails(requestId) {
@@ -728,7 +944,8 @@ function showRequestDetails(requestId) {
 
 function catalogRow(book) {
   const deleteAction = state.user.role === "admin" ? `<button class="reject-request" data-catalog-delete="${numeric(book.id)}">Delete</button>` : "";
-  return `<div class="request-row"><div class="request-info"><strong title="${esc(book.title)}">${esc(book.title)}</strong><small>${esc(book.author)} · ${numeric(book.available_copies)}/${numeric(book.total_copies)} available · ${esc(book.category || "Uncategorized")}</small></div><div class="request-actions"><button data-catalog-edit="${numeric(book.id)}">Edit</button>${deleteAction}</div></div>`;
+  const category = book.category || "Uncategorized";
+  return `<div class="catalog-book-row"><div class="catalog-book-cover">${window.NorthstarBookCovers.markup(book)}</div><div class="catalog-book-copy"><strong title="${esc(book.title)}">${esc(book.title)}</strong><small>${esc(book.author || "Author not recorded")}</small><small>ISBN ${esc(book.isbn || "Not recorded")}</small><div class="catalog-book-meta"><span class="tag">${esc(category)}</span><span>${numeric(book.available_copies)}/${numeric(book.total_copies)} available</span></div></div><div class="request-actions"><button data-catalog-edit="${numeric(book.id)}">Edit</button>${deleteAction}</div></div>`;
 }
 
 function showBookDetails(bookId) {
@@ -795,8 +1012,7 @@ function activeLoansOptions() {
 
 async function submitForm(form, path, body, successMessage) {
   const submitButton = form.querySelector('[type="submit"]');
-  submitButton.classList.add("button-loading");
-  submitButton.disabled = true;
+  setButtonPending(submitButton, true);
   try {
     const result = await api(path, { method: "POST", body: JSON.stringify(body) });
     toast(result.message || successMessage);
@@ -804,8 +1020,7 @@ async function submitForm(form, path, body, successMessage) {
     await refreshAll();
   } catch (error) {
     toast(error.message, true);
-    submitButton.classList.remove("button-loading");
-    submitButton.disabled = false;
+    setButtonPending(submitButton, false);
   }
 }
 
@@ -816,8 +1031,7 @@ async function submitBook(form) {
   values.publication_year = Number(values.publication_year);
   values.total_copies = Number(values.total_copies);
   const submitButton = form.querySelector('[type="submit"]');
-  submitButton.classList.add("button-loading");
-  submitButton.disabled = true;
+  setButtonPending(submitButton, true);
   let createdBookId = null;
   try {
     const result = await api("/books", { method: "POST", body: JSON.stringify(values) });
@@ -833,8 +1047,7 @@ async function submitBook(form) {
       toast(`Book was added, but the cover could not be uploaded: ${error.message}`, true);
     } else {
       toast(error.message, true);
-      submitButton.classList.remove("button-loading");
-      submitButton.disabled = false;
+      setButtonPending(submitButton, false);
     }
   }
 }
@@ -996,14 +1209,14 @@ async function reloadNotifications() {
 }
 
 async function refreshAll() {
-  $("connection-label").textContent = "Updating";
+  if ($("connection-label")) $("connection-label").textContent = "Updating";
   try {
     await loadData();
     renderDashboard();
-    $("connection-label").textContent = "Live";
+    if ($("connection-label")) $("connection-label").textContent = "Online";
   } catch (error) {
-    $("connection-label").textContent = "Unavailable";
-    $("sidebar-status").textContent = "Unable to refresh data";
+    if ($("connection-label")) $("connection-label").textContent = "Unavailable";
+    if ($("sidebar-status")) $("sidebar-status").textContent = "Unable to refresh data";
     toast(error.message, true);
   }
 }
@@ -1016,7 +1229,20 @@ function handleAction(event) {
     else if (action === "register-member") showFormModal("member");
     else if (action === "issue-book") showFormModal("issue");
     else if (action === "return-book") showFormModal("return");
-    else if (action === "scroll-requests") $("pending-requests").scrollIntoView({ behavior: "smooth" });
+    else if (action === "issue-return") showIssueReturnModal();
+    else if (action === "scroll-requests" || action === "show-requests") {
+      event.preventDefault();
+      showRequestsModal();
+    }
+    else if (action === "show-fines") showFineDesk();
+    else if (action === "export-loans") exportLoansCsv();
+    else if (action === "profile-settings" && state.user.role === "librarian") {
+      if ($("profile-menu")) $("profile-menu").hidden = true;
+      location.href = `${BASE}librarian/profile.html`;
+    }
+    else if (action === "profile-settings" && state.user.role === "admin") {
+      location.href = `${BASE}admin/system-settings.html#profile-security`;
+    }
     else if (action === "show-all-loans") {
       state.showAllLoans = !state.showAllLoans;
       renderLoans();
@@ -1038,8 +1264,11 @@ function handleAction(event) {
       togglePopover("notification-popover");
       if (!$("notification-popover").hidden) renderNotificationsPopover();
     } else if (action === "toggle-profile") {
-      togglePopover("profile-menu");
-      event.target.closest("[data-action]").setAttribute("aria-expanded", String(!$("profile-menu").hidden));
+      if (state.user.role === "librarian") {
+        location.href = `${BASE}librarian/profile.html`;
+      } else {
+        location.href = `${BASE}admin/system-settings.html#profile-security`;
+      }
     } else if (action === "mark-read") markNotificationRead(event.target.closest("[data-notification-id]").dataset.notificationId);
     else if (action === "mark-all-read") markAllNotificationsRead();
     else if (action === "find-cover") findBookCover(event.target.closest("form"));
@@ -1081,10 +1310,12 @@ function handleAction(event) {
 }
 
 async function collectFine(fineId) {
+  const cashDeskOpen = !$("modal-backdrop").hidden && $("modal-title").textContent === "Cash desk";
   try {
     const result = await api(`/fines/${numeric(fineId)}/collect`, { method: "POST" });
     toast(result.message || "Fine collected.");
     await refreshAll();
+    if (cashDeskOpen && $("connection-label").textContent === "Online") showFineDesk();
   } catch (error) {
     toast(error.message, true);
   }
@@ -1142,6 +1373,12 @@ function attachEvents() {
     if (event.target.closest(".side-link")) $("admin-sidebar").classList.remove("open");
   });
   document.addEventListener("keydown", (event) => {
+    const statAction = event.target.closest?.(".stat-action[data-action]");
+    if (statAction && (event.key === "Enter" || event.key === " ")) {
+      event.preventDefault();
+      statAction.click();
+      return;
+    }
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
       event.preventDefault();
       $("global-search").focus();
@@ -1158,15 +1395,19 @@ async function init() {
     const loaded = await loadData();
     if (!loaded) return;
     renderDashboard();
+    const open = new URLSearchParams(location.search).get("open");
+    if (open === "books") showCatalog();
+    else if (open === "requests") showRequestsModal();
+    else if (open === "report") showReport();
   } catch (error) {
     if (error.status === 401) {
       location.replace(`${BASE}login.html`);
       return;
     }
-    $("connection-label").textContent = "Unavailable";
-    $("sidebar-status").textContent = "Unable to load dashboard";
+    if ($("connection-label")) $("connection-label").textContent = "Unavailable";
+    if ($("sidebar-status")) $("sidebar-status").textContent = "Unable to load dashboard";
     toast(error.message, true);
-    $("stats-grid").innerHTML = `<div class="surface-panel no-data">${esc(error.message)} <button class="table-action" data-action="refresh">Retry</button></div>`;
+    if ($("stats-grid")) $("stats-grid").innerHTML = `<div class="surface-panel no-data">${esc(error.message)} <button class="table-action" data-action="refresh">Retry</button></div>`;
     ["loans-body", "request-list", "overdue-list", "category-list", "activity-list", "insights-list"].forEach((id) => {
       if ($(id)) $(id).innerHTML = `<div class="no-data">${esc(error.message)}</div>`;
     });

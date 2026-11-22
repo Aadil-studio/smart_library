@@ -3,11 +3,60 @@ import os
 from urllib.parse import urlencode, urlsplit
 
 from fastapi import APIRouter, Depends, Request
+from fastapi.responses import JSONResponse
 
 from routes import (admin_required, current_user, fail, get_controller, json_body,
                     login_required, ok, password_problem, require_fields, valid_email)
 
 router = APIRouter(prefix="/api/auth")
+
+
+def _request_reset_code(request: Request, email: str):
+    from services.email_service import send_otp_email, smtp_configuration_status
+
+    smtp_status = smtp_configuration_status()
+    if not smtp_status["ready"]:
+        return fail(
+            "Email delivery is not configured: " + "; ".join(smtp_status["issues"]) + ".",
+            503,
+        )
+
+    base_url = os.environ.get("APP_BASE_URL", "").strip().rstrip("/")
+    if base_url:
+        parsed_base_url = urlsplit(base_url)
+        if parsed_base_url.scheme != "https" or not parsed_base_url.netloc:
+            return fail("Email delivery is misconfigured: APP_BASE_URL must be an HTTPS URL.", 503)
+
+    controller = get_controller(request)
+    allowed, retry_after = controller.user_dao.check_otp_request_limit(
+        email, request.client.host if request.client else "", request.app.state.secret_key
+    )
+    if not allowed:
+        return JSONResponse(
+            status_code=429,
+            content={
+                "success": False,
+                "message": f"Please wait {retry_after} seconds before requesting another code.",
+                "data": {"retry_after_seconds": retry_after},
+            },
+        )
+
+    success, otp_or_message = controller.generate_otp(email)
+    if not success:
+        # Keep the response neutral so the endpoint does not reveal registered addresses.
+        return ok(message="If that email is registered, a verification code has been sent.")
+
+    reset_url = (
+        f"{base_url}/reset-password.html?{urlencode({'email': email})}" if base_url else None
+    )
+    sent, delivery_message = send_otp_email(email, otp_or_message, reset_url)
+    if not sent:
+        controller.user_dao.invalidate_otp(email)
+        logging.getLogger("uvicorn.error").error(
+            "Password-reset email delivery failed: %s", delivery_message
+        )
+        return fail(delivery_message, 502)
+    return ok(message="If that email is registered, a verification code has been sent.")
 
 
 @router.post("/register")
@@ -92,9 +141,23 @@ async def me(request: Request):
     return ok(data={"user": user})
 
 
+@router.get("/email-config")
+async def email_config(request: Request, _user: dict = Depends(admin_required)):
+    """Admin-only SMTP diagnostics; reports presence and source, never values."""
+    from services.email_service import smtp_configuration_status
+
+    status = smtp_configuration_status()
+    status["env_file_path"] = request.app.state.env_file_path
+    status["env_file_exists"] = request.app.state.env_file_exists
+    status["sources"] = {
+        key: request.app.state.env_sources.get(key, "missing")
+        for key in ("SMTP_HOST", "SMTP_PORT", "SMTP_FROM", "SMTP_USER", "SMTP_PASSWORD", "SMTP_PASS")
+    }
+    return ok(data=status, message="SMTP configuration status.")
+
+
 @router.post("/forgot-password")
 async def forgot_password(request: Request):
-    controller = get_controller(request)
     data = await json_body(request)
     error = require_fields(data, "email")
     if error:
@@ -102,40 +165,24 @@ async def forgot_password(request: Request):
     email = str(data["email"]).strip().lower()
     if not valid_email(email):
         return fail("Please enter a valid email address.")
+    return _request_reset_code(request, email)
 
-    success, otp_or_msg = controller.generate_otp(email)
-    if not success:
-        # Do not reveal whether an email is registered to an attacker probing accounts
-        return ok(message="If that email is registered, a verification code has been sent.")
 
-    from services.email_service import send_otp_email
-    message = "If that email is registered, a verification code has been sent."
-    response_data = None
-    if os.environ.get("SMTP_HOST") and os.environ.get("SMTP_FROM"):
-        # Real delivery: the 6-digit code AND a reset link land in the user's Gmail inbox.
-        base_url = os.environ.get("APP_BASE_URL", "").strip().rstrip("/")
-        parsed_base_url = urlsplit(base_url)
-        if parsed_base_url.scheme != "https" or not parsed_base_url.netloc:
-            logging.getLogger("uvicorn.error").error(
-                "APP_BASE_URL must be configured with the public HTTPS application URL."
-            )
-            return ok(message=message)
-        reset_url = f"{base_url}/reset-password.html?{urlencode({'email': email})}"
-        sent, delivery_message = send_otp_email(email, otp_or_msg, reset_url)
-        if not sent:
-            logging.getLogger("uvicorn.error").error(
-                "Password-reset email delivery failed: %s", delivery_message
-            )
-    elif os.environ.get("OTP_DEV_MODE", "0") == "1":
-        # DEVELOPMENT ONLY: no SMTP configured, so the code is returned for testing.
-        response_data = {"dev_otp": otp_or_msg}
-        message = "Development mode: use the verification code shown below."
-    return ok(data=response_data, message=message)
+@router.post("/resend-otp")
+async def resend_otp(request: Request):
+    data = await json_body(request)
+    error = require_fields(data, "email")
+    if error:
+        return fail(error)
+    email = str(data["email"]).strip().lower()
+    if not valid_email(email):
+        return fail("Please enter a valid email address.")
+    return _request_reset_code(request, email)
 
 
 @router.post("/verify-otp")
 async def verify_otp(request: Request):
-    """Step 1 of the reset: the user enters the code emailed to their Gmail.
+    """Step 1 of the reset: the user enters the code emailed to their address.
     On success a short-lived signed token is returned — only then is the
     change-password step unlocked."""
     controller = get_controller(request)
@@ -146,7 +193,7 @@ async def verify_otp(request: Request):
     email = str(data["email"]).strip().lower()
     verified, message, otp_hash = controller.user_dao.verify_otp(email, str(data["otp"]).strip())
     if not verified:
-        return fail("Invalid or expired verification code.")
+        return fail(message)
 
     from itsdangerous import URLSafeTimedSerializer
     signer = URLSafeTimedSerializer(request.app.state.secret_key, salt="password-reset")
@@ -156,32 +203,25 @@ async def verify_otp(request: Request):
 
 @router.post("/reset-password")
 async def reset_password(request: Request):
-    """Step 2 of the reset: allowed only with a token from a verified OTP
-    (or the raw code, verified again server-side)."""
+    """Step 2 of the reset: allowed only with a token from a verified OTP."""
     controller = get_controller(request)
     data = await json_body(request)
-    error = require_fields(data, "new_password", "confirm_password")
+    error = require_fields(data, "new_password", "confirm_password", "reset_token")
     if error:
-        return fail(error)
-    if not data.get("reset_token") and (error := require_fields(data, "email", "otp")):
         return fail(error)
     if data["new_password"] != data["confirm_password"]:
         return fail("Passwords do not match.")
     if problem := password_problem(data["new_password"]):
         return fail(problem)
 
-    if data.get("reset_token"):
-        from itsdangerous import BadData, URLSafeTimedSerializer
-        signer = URLSafeTimedSerializer(request.app.state.secret_key, salt="password-reset")
-        try:
-            payload = signer.loads(str(data["reset_token"]), max_age=600)
-        except BadData:
-            return fail("Your verification has expired. Please enter the code again.")
-        success, message = controller.user_dao.reset_password_with_hash(
-            payload["email"], payload["otp_hash"], data["new_password"])
-    else:
-        success, message = controller.reset_password(
-            str(data["email"]).strip().lower(), str(data["otp"]).strip(), data["new_password"])
+    from itsdangerous import BadData, URLSafeTimedSerializer
+    signer = URLSafeTimedSerializer(request.app.state.secret_key, salt="password-reset")
+    try:
+        payload = signer.loads(str(data["reset_token"]), max_age=600)
+    except BadData:
+        return fail("Your password reset session has expired. Please request a new code.")
+    success, message = controller.user_dao.reset_password_with_hash(
+        payload["email"], payload["otp_hash"], data["new_password"])
     if not success:
         return fail(message)
     return ok(message=message)

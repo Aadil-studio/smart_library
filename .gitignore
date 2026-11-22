@@ -7,6 +7,7 @@ __pycache__/
 library.db
 library.db-shm
 library.db-wal
+frontend/uploads/avatars/
 localhost-cert.pem
 localhost-key.pem
 report.html

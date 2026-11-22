@@ -17,10 +17,10 @@ def api(monkeypatch):
     monkeypatch.setenv("ADMIN_PASSWORD", "admin123")
     monkeypatch.setenv("APP_DEBUG", "1")
     monkeypatch.setenv("SECRET_KEY", "isolated-test-session-secret")
-    monkeypatch.setenv("OTP_DEV_MODE", "1")
     # the live server runs HTTPS with Secure cookies; the test client is plain HTTP
     monkeypatch.setenv("SESSION_COOKIE_SECURE", "0")
-    monkeypatch.delenv("SMTP_HOST", raising=False)
+    for key in ("SMTP_HOST", "SMTP_PORT", "SMTP_FROM", "SMTP_USER", "SMTP_PASSWORD", "SMTP_PASS", "APP_BASE_URL"):
+        monkeypatch.setenv(key, "")
 
     instance = object.__new__(DatabaseConnection)
     instance.connection = sqlite3.connect(":memory:", check_same_thread=False)
@@ -46,6 +46,21 @@ def login_as(client, credential, password):
     response = client.post("/api/auth/login", json={"credential": credential, "password": password})
     assert response.status_code == 200, response.json()
     return response
+
+
+def capture_otp_delivery(monkeypatch):
+    sent_codes = []
+
+    def fake_send(_to_email, otp, _reset_url=None):
+        sent_codes.append(otp)
+        return True, "A verification code has been emailed to you."
+
+    monkeypatch.setenv("SMTP_HOST", "smtp.example.test")
+    monkeypatch.setenv("SMTP_PORT", "587")
+    monkeypatch.setenv("SMTP_FROM", "library@example.test")
+    monkeypatch.setenv("APP_BASE_URL", "https://library.example.test")
+    monkeypatch.setattr("services.email_service.send_otp_email", fake_send)
+    return sent_codes
 
 
 def add_book(controller, title="Clean Code", isbn="978-0132350884", copies=2):
@@ -147,19 +162,27 @@ def test_legacy_password_hashes_are_upgraded(api):
     assert stored.startswith(("pbkdf2:", "scrypt:"))  # upgraded to a salted werkzeug hash
 
 
-def test_password_reset_otp_flow(api):
+def test_password_reset_otp_flow(api, monkeypatch):
     client, _, _ = api
+    sent_codes = capture_otp_delivery(monkeypatch)
     response = client.post("/api/auth/forgot-password", json={"email": "nina@library.com"})
-    otp = response.json()["data"]["dev_otp"]
+    otp = sent_codes[-1]
+    assert response.status_code == 200
+    assert "dev_otp" not in response.json().get("data", {})
     assert len(otp) == 6
 
-    assert client.post("/api/auth/verify-otp", json={"email": "nina@library.com", "otp": "000000"}).status_code == 400
-    assert client.post("/api/auth/verify-otp", json={"email": "nina@library.com", "otp": otp}).status_code == 200
+    invalid = client.post("/api/auth/verify-otp", json={"email": "nina@library.com", "otp": "000000"})
+    assert invalid.status_code == 400
+    assert invalid.json()["message"] == "That verification code is incorrect."
+    verified = client.post("/api/auth/verify-otp", json={"email": "nina@library.com", "otp": otp})
+    assert verified.status_code == 200
+    assert client.post("/api/auth/verify-otp", json={"email": "nina@library.com", "otp": otp}).status_code == 400
     reset = client.post("/api/auth/reset-password", json={
-        "email": "nina@library.com", "otp": otp, "new_password": "newpass99", "confirm_password": "newpass99"})
+        "reset_token": verified.json()["data"]["reset_token"],
+        "new_password": "newpass99", "confirm_password": "newpass99"})
     assert reset.status_code == 200
     login_as(client, "nina@library.com", "newpass99")
-    # The used OTP cannot reset the password a second time
+    # A reset token is single-use, and the raw OTP cannot bypass verification.
     assert client.post("/api/auth/reset-password", json={
         "email": "nina@library.com", "otp": otp, "new_password": "another12",
         "confirm_password": "another12"}).status_code == 400
@@ -167,14 +190,48 @@ def test_password_reset_otp_flow(api):
     assert client.post("/api/auth/forgot-password", json={"email": "ghost@nowhere.io"}).status_code == 200
 
 
-def test_smtp_password_reset_sends_otp_and_reset_link(api, monkeypatch):
-    import smtplib
-
+def test_email_config_diagnostic_is_admin_only_and_never_returns_values(api):
     client, _, _ = api
+    assert client.get("/api/auth/email-config").status_code == 401
+
+    login_as(client, "admin@library.com", "admin123")
+    response = client.get("/api/auth/email-config")
+    assert response.status_code == 200
+    status = response.json()["data"]
+    assert status["env_file_path"].endswith(r"\smart_library\.env")
+    assert status["env_file_exists"] is True
+    assert status["smtp_host_detected"] is False
+    assert status["smtp_sender_detected"] is False
+    assert status["smtp_password_detected"] is False
+    assert status["smtp_password_source"] == "missing"
+    assert status["sources"]["SMTP_HOST"] == "process"
+    assert status["sources"]["SMTP_PASSWORD"] == "process"
+    assert "isolated-test-session-secret" not in response.text
+
+
+def test_gmail_smtp_configuration_requires_authentication(api, monkeypatch):
+    _, _, _ = api
+    monkeypatch.setenv("SMTP_HOST", "smtp.gmail.com")
+    monkeypatch.setenv("SMTP_PORT", "587")
+    monkeypatch.setenv("SMTP_FROM", "sender@example.com")
+    monkeypatch.setenv("SMTP_USER", "")
+    monkeypatch.setenv("SMTP_PASS", "")
+    from services.email_service import smtp_configuration_status
+
+    status = smtp_configuration_status()
+    assert status["smtp_auth_required"] is True
+    assert status["ready"] is False
+    assert any("SMTP_USER and SMTP_PASS" in issue for issue in status["issues"])
+
+
+def test_gmail_smtp_password_variable_and_implicit_tls(api, monkeypatch):
+    import smtplib
+    from services.email_service import send_otp_email, smtp_configuration_status
+
     sent = {}
 
-    class FakeSMTP:
-        def __init__(self, host, port, timeout):
+    class FakeSMTPSSL:
+        def __init__(self, host, port, timeout, context=None):
             sent["connection"] = (host, port, timeout)
 
         def __enter__(self):
@@ -183,16 +240,149 @@ def test_smtp_password_reset_sends_otp_and_reset_link(api, monkeypatch):
         def __exit__(self, *_args):
             return False
 
-        def starttls(self):
+        def login(self, username, password):
+            sent["credentials"] = (username, password)
+
+        def send_message(self, _message):
+            sent["sent"] = True
+
+    monkeypatch.setattr(smtplib, "SMTP_SSL", FakeSMTPSSL)
+    monkeypatch.setenv("SMTP_HOST", "smtp.gmail.com")
+    monkeypatch.setenv("SMTP_PORT", "465")
+    monkeypatch.setenv("SMTP_FROM", "library@gmail.com")
+    monkeypatch.setenv("SMTP_USER", "library@gmail.com")
+    monkeypatch.setenv("SMTP_PASSWORD", "abcd efgh ijkl mnop")
+    monkeypatch.setenv("SMTP_PASS", "legacy-password")
+
+    status = smtp_configuration_status()
+    assert status["ready"] is True
+    assert status["smtp_password_source"] == "SMTP_PASSWORD"
+    success, message = send_otp_email("member@example.com", "123456")
+
+    assert success is True
+    assert message == "A verification code has been emailed to you."
+    assert sent["connection"] == ("smtp.gmail.com", 465, 10)
+    assert sent["credentials"] == ("library@gmail.com", "abcdefghijklmnop")
+    assert sent["sent"] is True
+
+
+def test_gmail_authentication_error_is_logged_without_credentials(api, monkeypatch, caplog):
+    import logging
+    import smtplib
+    from services.email_service import send_otp_email
+
+    username = "private-user@gmail.com"
+    password = "private-app-password"
+
+    class FakeSMTP:
+        def __init__(self, host, port, timeout):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def starttls(self, context=None):
+            pass
+
+        def login(self, _username, _password):
+            raise smtplib.SMTPAuthenticationError(535, b"5.7.8 Username and Password not accepted")
+
+    monkeypatch.setattr(smtplib, "SMTP", FakeSMTP)
+    monkeypatch.setenv("SMTP_HOST", "smtp.gmail.com")
+    monkeypatch.setenv("SMTP_PORT", "587")
+    monkeypatch.setenv("SMTP_FROM", username)
+    monkeypatch.setenv("SMTP_USER", username)
+    monkeypatch.setenv("SMTP_PASSWORD", password)
+
+    with caplog.at_level(logging.ERROR, logger="uvicorn.error"):
+        success, message = send_otp_email("member@example.com", "123456")
+
+    assert success is False
+    assert "Google App Password" in message
+    assert "SMTP 535: 5.7.8 Username and Password not accepted" in caplog.text
+    assert username not in caplog.text
+    assert password not in caplog.text
+
+
+def test_otp_configuration_expiry_attempts_and_resend(api, monkeypatch):
+    client, controller, _ = api
+    missing_mail = client.post("/api/auth/forgot-password", json={"email": "nina@library.com"})
+    assert missing_mail.status_code == 503
+    assert "SMTP_HOST" in missing_mail.json()["message"]
+
+    sent_codes = capture_otp_delivery(monkeypatch)
+    first = client.post("/api/auth/forgot-password", json={"email": "nina@library.com"})
+    assert first.status_code == 200
+    first_code = sent_codes[-1]
+    blocked = client.post("/api/auth/resend-otp", json={"email": "nina@library.com"})
+    assert blocked.status_code == 429
+    assert blocked.json()["data"]["retry_after_seconds"] > 0
+
+    connection = controller.user_dao.db
+    connection.execute("UPDATE otp_request_limits SET requested_at=requested_at-61")
+    connection.commit()
+    resent = client.post("/api/auth/resend-otp", json={"email": "nina@library.com"})
+    assert resent.status_code == 200
+    second_code = sent_codes[-1]
+    assert second_code != first_code
+    assert client.post("/api/auth/verify-otp", json={
+        "email": "nina@library.com", "otp": first_code}).json()["message"] == \
+        "That verification code is incorrect."
+    assert client.post("/api/auth/verify-otp", json={
+        "email": "nina@library.com", "otp": second_code}).status_code == 200
+
+    connection.execute(
+        "UPDATE password_reset_otps SET expires_at='2000-01-01 00:00:00' WHERE user_id='STU999'"
+    )
+    connection.commit()
+    expired = client.post("/api/auth/verify-otp", json={
+        "email": "nina@library.com", "otp": sent_codes[-1]})
+    assert expired.status_code == 400
+    assert "expired" in expired.json()["message"].lower()
+
+
+def test_otp_verification_attempt_limit(api, monkeypatch):
+    client, _, _ = api
+    capture_otp_delivery(monkeypatch)
+    assert client.post("/api/auth/forgot-password", json={"email": "nina@library.com"}).status_code == 200
+    for attempt in range(5):
+        response = client.post("/api/auth/verify-otp", json={
+            "email": "nina@library.com", "otp": f"{attempt:06d}"})
+    assert response.status_code == 400
+    assert "too many incorrect attempts" in response.json()["message"].lower()
+
+
+def test_smtp_password_reset_sends_otp_and_reset_link(api, monkeypatch):
+    import smtplib
+
+    client, controller, _ = api
+    sent = {}
+
+    class FakeSMTP:
+        def __init__(self, host, port, timeout):
+            sent["connection"] = (host, port, timeout)
+            sent.setdefault("messages", [])
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def starttls(self, context=None):
             sent["tls"] = True
 
         def login(self, username, password):
             sent["credentials"] = (username, password)
 
-        def sendmail(self, sender, recipients, message):
+        def send_message(self, message):
             if sent.get("fail_delivery"):
                 raise smtplib.SMTPException("test transport failure")
-            sent["message"] = message
+            sent["message"] = message.as_string()
+            sent["messages"].append(sent["message"])
 
     monkeypatch.setattr("smtplib.SMTP", FakeSMTP)
     monkeypatch.setenv("SMTP_HOST", "smtp.example.test")
@@ -201,7 +391,6 @@ def test_smtp_password_reset_sends_otp_and_reset_link(api, monkeypatch):
     monkeypatch.setenv("SMTP_USER", "smtp-user")
     monkeypatch.setenv("SMTP_PASS", "smtp-password")
     monkeypatch.setenv("APP_BASE_URL", "https://library.example.test")
-    monkeypatch.setenv("OTP_DEV_MODE", "0")
 
     response = client.post("/api/auth/forgot-password", json={"email": "nina@library.com"})
     assert response.status_code == 200
@@ -211,13 +400,31 @@ def test_smtp_password_reset_sends_otp_and_reset_link(api, monkeypatch):
     assert sent["credentials"] == ("smtp-user", "smtp-password")
     from email import message_from_string
     message = message_from_string(sent["message"])
-    body = message.get_payload(decode=True).decode(message.get_content_charset())
-    assert "verification code" in body
+    body = next(part for part in message.walk() if part.get_content_type() == "text/plain")
+    body = body.get_payload(decode=True).decode(body.get_content_charset())
+    assert "password reset code" in body
+    assert "10 minutes" in body
     assert "https://library.example.test/reset-password.html?email=nina%40library.com" in body
+
+    controller.register("STU998", "Kim Wells", "kim@library.com", "passw0rd1", role="student")
+    response = client.post("/api/auth/forgot-password", json={"email": "kim@library.com"})
+    assert response.status_code == 200
+    message = message_from_string(sent["message"])
+    assert message["To"] == "kim@library.com"
+    body = next(part for part in message.walk() if part.get_content_type() == "text/plain")
+    body = body.get_payload(decode=True).decode(body.get_content_charset())
+    kim_otp = body.split("code is ", 1)[1].split(".", 1)[0]
+    verified = client.post("/api/auth/verify-otp", json={"email": "kim@library.com", "otp": kim_otp})
+    assert verified.status_code == 200
+
+    controller.register("STU997", "Jordan Wells", "jordan@library.com", "passw0rd1", role="student")
     sent["fail_delivery"] = True
-    failed_delivery = client.post("/api/auth/forgot-password", json={"email": "nina@library.com"})
+    failed_delivery = client.post("/api/auth/forgot-password", json={"email": "jordan@library.com"})
+    assert failed_delivery.status_code == 502
+    assert controller.user_dao.verify_otp("jordan@library.com", "000000")[1] == \
+        "No active verification code. Please request a new one."
     unknown_account = client.post("/api/auth/forgot-password", json={"email": "ghost@nowhere.io"})
-    assert failed_delivery.json()["message"] == unknown_account.json()["message"]
+    assert unknown_account.status_code == 200
 
 
 def test_json_body_rejects_malformed_and_non_object_requests(api):
@@ -254,17 +461,19 @@ def test_existing_sessions_respect_role_and_status_changes(api):
     assert librarian_client.get("/admin/dashboard.html").headers["Location"].endswith("/login.html")
 
 
-def test_password_reset_requires_otp_verification_first(api):
+def test_password_reset_requires_otp_verification_first(api, monkeypatch):
     """The OTP is verified before the reset: a signed token unlocks the change,
     and it cannot be reused, and the reset is refused without OTP or token."""
     client, _, _ = api
+    sent_codes = capture_otp_delivery(monkeypatch)
     # Without a verified OTP (and without a token) the reset is rejected
     assert client.post("/api/auth/reset-password", json={
         "email": "nina@library.com", "otp": "000000", "new_password": "newpass99",
         "confirm_password": "newpass99"}).status_code == 400
 
     response = client.post("/api/auth/forgot-password", json={"email": "nina@library.com"})
-    otp = response.json()["data"]["dev_otp"]
+    assert response.status_code == 200
+    otp = sent_codes[-1]
     verified = client.post("/api/auth/verify-otp", json={"email": "nina@library.com", "otp": otp})
     token = verified.json()["data"]["reset_token"]
     assert token
@@ -888,6 +1097,177 @@ def test_profile_update_change_password_and_preferences(api):
     assert prefs.json()["data"]["preferences"]["due_reminders"] is False
 
 
+def test_student_avatar_upload_replace_and_remove(api):
+    from io import BytesIO
+    from pathlib import Path
+
+    from PIL import Image
+
+    client, _, _ = api
+    image_data = BytesIO()
+    Image.new("RGB", (12, 12), color=(96, 72, 180)).save(image_data, format="PNG")
+    png = image_data.getvalue()
+
+    assert client.post("/api/profile/avatar", files={"file": ("avatar.png", png, "image/png")}).status_code == 401
+    login_as(client, "ray@library.com", "passw0rd1")
+    librarian_upload = client.post(
+        "/api/profile/avatar",
+        files={"file": ("avatar.png", png, "image/png")},
+    )
+    assert librarian_upload.status_code == 200
+    librarian_url = librarian_upload.json()["data"]["profile"]["avatar_url"]
+    librarian_path = Path(__file__).resolve().parents[1] / "frontend" / librarian_url.lstrip("/")
+    assert librarian_path.is_file()
+    assert client.delete("/api/profile/avatar").status_code == 200
+    assert not librarian_path.exists()
+    client.post("/api/auth/logout")
+
+    login_as(client, "nina@library.com", "passw0rd1")
+    invalid = client.post(
+        "/api/profile/avatar",
+        files={"file": ("avatar.png", b"not an image", "image/png")},
+    )
+    assert invalid.status_code == 400
+    too_large = client.post(
+        "/api/profile/avatar",
+        files={"file": ("large.png", b"x" * (2 * 1024 * 1024 + 1), "image/png")},
+    )
+    assert too_large.status_code == 413
+
+    uploaded = client.post(
+        "/api/profile/avatar",
+        files={"file": ("avatar.png", png, "image/png")},
+    )
+    assert uploaded.status_code == 200, uploaded.json()
+    first_url = uploaded.json()["data"]["profile"]["avatar_url"]
+    first_path = Path(__file__).resolve().parents[1] / "frontend" / first_url.lstrip("/")
+    assert first_path.is_file()
+    assert client.get(first_url).status_code == 200
+    assert client.get("/api/profile").json()["data"]["profile"]["avatar_url"] == first_url
+    assert client.get("/api/auth/me").json()["data"]["user"]["avatar_url"] == first_url
+
+    replacement = client.post(
+        "/api/profile/avatar",
+        files={"file": ("avatar.png", png, "image/png")},
+    )
+    assert replacement.status_code == 200, replacement.json()
+    second_url = replacement.json()["data"]["profile"]["avatar_url"]
+    second_path = Path(__file__).resolve().parents[1] / "frontend" / second_url.lstrip("/")
+    assert second_url != first_url
+    assert not first_path.exists()
+    assert second_path.is_file()
+
+    removed = client.delete("/api/profile/avatar")
+    assert removed.status_code == 200
+    assert removed.json()["data"]["profile"]["avatar_url"] is None
+    assert not second_path.exists()
+    assert client.get("/api/auth/me").json()["data"]["user"]["avatar_url"] is None
+
+
+def test_librarian_profile_page_and_account_endpoints(api):
+    client, _, _ = api
+    assert client.get("/librarian/profile.html").status_code == 302
+    login_as(client, "ray@library.com", "passw0rd1")
+
+    page = client.get("/librarian/profile.html")
+    assert page.status_code == 200
+    assert "Workspace" in page.text
+    assert "My Profile" in page.text
+    assert "Change password" in page.text
+
+    profile = client.get("/api/profile")
+    assert profile.status_code == 200
+    assert profile.json()["data"]["profile"]["role"] == "librarian"
+
+    updated = client.put("/api/profile", json={
+        "name": "librarian ray", "phone": "555-0101",
+        "department": "", "semester": "",
+    })
+    assert updated.status_code == 200
+    assert updated.json()["data"]["profile"]["phone"] == "555-0101"
+
+    wrong_password = client.post("/api/profile/password", json={
+        "current_password": "wrongpass", "new_password": "newpass123",
+        "confirm_password": "newpass123",
+    })
+    assert wrong_password.status_code == 403
+    changed = client.post("/api/profile/password", json={
+        "current_password": "passw0rd1", "new_password": "newpass123",
+        "confirm_password": "newpass123",
+    })
+    assert changed.status_code == 200
+    client.post("/api/auth/logout")
+    login_as(client, "nina@library.com", "passw0rd1")
+    restricted_page = client.get("/librarian/profile.html", follow_redirects=False)
+    assert restricted_page.status_code == 302
+    assert restricted_page.headers["location"] == "/student/dashboard.html"
+
+
+def test_librarian_profile_and_password_endpoints(api):
+    client, _, _ = api
+    assert client.get("/api/librarian/profile").status_code == 401
+
+    login_as(client, "nina@library.com", "passw0rd1")
+    assert client.get("/api/librarian/profile").status_code == 403
+    client.post("/api/auth/logout")
+
+    login_as(client, "admin@library.com", "admin123")
+    assert client.get("/api/librarian/profile").status_code == 403
+    client.post("/api/auth/logout")
+
+    login_as(client, "ray@library.com", "passw0rd1")
+    profile = client.get("/api/librarian/profile")
+    assert profile.status_code == 200
+    assert profile.json()["data"]["profile"] == {
+        "user_id": "STAFF01",
+        "name": "Librarian Ray",
+        "email": "ray@library.com",
+        "role": "librarian",
+    }
+
+    invalid_email = client.put("/api/librarian/profile", json={
+        "name": "Librarian Ray", "email": "not-an-email",
+    })
+    assert invalid_email.status_code == 400
+    duplicate_email = client.put("/api/librarian/profile", json={
+        "name": "Librarian Ray", "email": "nina@library.com",
+    })
+    assert duplicate_email.status_code == 409
+
+    updated = client.put("/api/librarian/profile", json={
+        "name": "Ray Northstar", "email": "ray.northstar@library.com",
+    })
+    assert updated.status_code == 200
+    assert updated.json()["data"]["profile"]["name"] == "Ray Northstar"
+    assert updated.json()["data"]["profile"]["email"] == "ray.northstar@library.com"
+    assert client.get("/api/auth/me").json()["data"]["user"]["email"] == "ray.northstar@library.com"
+
+    wrong_password = client.post("/api/librarian/change-password", json={
+        "current_password": "wrongpass", "new_password": "newpass2",
+        "confirm_password": "newpass2",
+    })
+    assert wrong_password.status_code == 403
+    short_password = client.post("/api/librarian/change-password", json={
+        "current_password": "passw0rd1", "new_password": "short",
+        "confirm_password": "short",
+    })
+    assert short_password.status_code == 400
+    mismatch = client.post("/api/librarian/change-password", json={
+        "current_password": "passw0rd1", "new_password": "newpass2",
+        "confirm_password": "different",
+    })
+    assert mismatch.status_code == 400
+    changed = client.post("/api/librarian/change-password", json={
+        "current_password": "passw0rd1", "new_password": "newp12",
+        "confirm_password": "newp12",
+    })
+    assert changed.status_code == 200
+    client.post("/api/auth/logout")
+    assert client.post("/api/auth/login", json={
+        "credential": "ray.northstar@library.com", "password": "newp12",
+    }).status_code == 200
+
+
 # --- Dashboards & reports ---
 def test_dashboards_and_reports(api):
     client, controller, _ = api
@@ -985,6 +1365,78 @@ def test_admin_user_management(api):
     assert client.put("/api/users/STAFF01/role", json={"role": "bogus"}).status_code == 400
 
 
+def test_admin_creates_staff_and_manages_own_profile_security(api):
+    client, controller, _ = api
+    assert client.get("/api/admin/profile").status_code == 401
+    assert client.post("/api/admin/change-password", json={
+        "current_password": "admin123", "new_password": "newpass99",
+        "confirm_password": "newpass99",
+    }).status_code == 401
+    staff_payload = {
+        "user_id": "LIBR002",
+        "name": "Librarian Two",
+        "email": "librarian.two@library.com",
+        "role": "librarian",
+        "password": "secure123",
+        "confirm_password": "secure123",
+    }
+    assert client.post("/api/users", json=staff_payload).status_code == 401
+
+    login_as(client, "nina@library.com", "passw0rd1")
+    assert client.post("/api/users", json=staff_payload).status_code == 403
+    client.post("/api/auth/logout")
+
+    login_as(client, "admin@library.com", "admin123")
+    created = client.post("/api/users", json=staff_payload)
+    assert created.status_code == 200
+    assert created.json()["data"]["user"]["role"] == "librarian"
+    assert "password" not in created.json()["data"]["user"]
+    assert client.post("/api/users", json=staff_payload).status_code == 409
+    assert client.post("/api/users", json={**staff_payload, "role": "admin", "user_id": "ADMIN002"}).status_code == 400
+    student_payload = {
+        **staff_payload,
+        "user_id": "STU998",
+        "name": "Student Example",
+        "email": "student.example@library.com",
+        "role": "student",
+    }
+    created_student = client.post("/api/users", json=student_payload)
+    assert created_student.status_code == 200
+    assert created_student.json()["data"]["user"]["role"] == "student"
+
+    profile = client.get("/api/admin/profile")
+    assert profile.status_code == 200
+    assert profile.json()["data"]["profile"]["user_id"] == "ADMIN001"
+    assert "password" not in profile.json()["data"]["profile"]
+
+    assert client.put("/api/admin/profile", json={
+        "name": "System Administrator", "email": "invalid",
+    }).status_code == 400
+    assert client.put("/api/admin/profile", json={
+        "name": "System Administrator", "email": "nina@library.com",
+    }).status_code == 409
+    updated = client.put("/api/admin/profile", json={
+        "name": "System Admin", "email": "sysadmin@library.com",
+    })
+    assert updated.status_code == 200
+    assert client.get("/api/auth/me").json()["data"]["user"]["email"] == "sysadmin@library.com"
+
+    assert client.post("/api/admin/change-password", json={
+        "current_password": "wrongpass", "new_password": "newpass99",
+        "confirm_password": "newpass99",
+    }).status_code == 403
+    changed = client.post("/api/admin/change-password", json={
+        "current_password": "admin123", "new_password": "newpass99",
+        "confirm_password": "newpass99",
+    })
+    assert changed.status_code == 200
+    client.post("/api/auth/logout")
+    assert client.post("/api/auth/login", json={
+        "credential": "sysadmin@library.com", "password": "newpass99",
+    }).status_code == 200
+    assert controller.get_user("LIBR002")["role"] == "librarian"
+
+
 # --- System settings ---
 def test_system_settings_read_and_write(api):
     client, _, _ = api
@@ -1058,3 +1510,90 @@ def test_book_sorting(api):
                     client.get("/api/books?sort=title").json()["data"]["books"]]
     assert titles_title == sorted(titles_title, key=str.lower)
     assert client.get("/api/books?sort=bogus").status_code == 400
+
+
+# --- Student wishlist and loan renewal ---
+def test_student_wishlist_toggle_is_private_and_student_only(api):
+    client, controller, _ = api
+    book_id = add_book(controller, isbn="978-8888888881")
+    assert client.get("/api/student/wishlist").status_code == 401
+
+    login_as(client, "nina@library.com", "passw0rd1")
+    saved = client.post(f"/api/student/wishlist/{book_id}")
+    assert saved.status_code == 200
+    assert saved.json()["data"]["saved"] is True
+    wishlist = client.get("/api/student/wishlist")
+    assert [item["book_id"] for item in wishlist.json()["data"]["wishlist"]] == [book_id]
+
+    removed = client.post(f"/api/student/wishlist/{book_id}")
+    assert removed.status_code == 200
+    assert removed.json()["data"]["saved"] is False
+    assert client.get("/api/student/wishlist").json()["data"]["wishlist"] == []
+    assert client.post("/api/student/wishlist/999999").status_code == 404
+
+    client.post("/api/auth/logout")
+    login_as(client, "ray@library.com", "passw0rd1")
+    assert client.get("/api/student/wishlist").status_code == 403
+
+
+def test_student_loan_can_be_renewed_once_by_seven_days(api):
+    client, controller, _ = api
+    book_id = add_book(controller, isbn="978-8888888882", copies=1)
+    login_as(client, "nina@library.com", "passw0rd1")
+    borrowed = client.post("/api/borrow", json={"student_id": "STU999", "book_id": book_id, "days": 14})
+    assert borrowed.status_code == 200
+
+    with DatabaseConnection().get_connection() as conn:
+        loan_id = conn.execute(
+            "SELECT id FROM transactions WHERE student_id='STU999' AND book_id=?",
+            (book_id,),
+        ).fetchone()["id"]
+        original_due_date = conn.execute(
+            "SELECT due_date FROM transactions WHERE id=?",
+            (loan_id,),
+        ).fetchone()["due_date"]
+
+    renewed = client.post(f"/api/student/loans/{loan_id}/renew")
+    assert renewed.status_code == 200, renewed.json()
+    expected_due_date = DatabaseConnection().get_connection().execute(
+        "SELECT DATE(?, '+7 days')",
+        (original_due_date,),
+    ).fetchone()[0]
+    assert renewed.json()["data"]["due_date"] == expected_due_date
+    assert loan_id in client.get("/api/student/loans/renewals").json()["data"]["renewed_loan_ids"]
+
+    second_attempt = client.post(f"/api/student/loans/{loan_id}/renew")
+    assert second_attempt.status_code == 409
+    with DatabaseConnection().get_connection() as conn:
+        assert conn.execute(
+            "SELECT due_date FROM transactions WHERE id=?",
+            (loan_id,),
+        ).fetchone()["due_date"] == expected_due_date
+
+
+def test_student_cannot_renew_another_or_overdue_loan(api):
+    client, controller, _ = api
+    book_id = add_book(controller, isbn="978-8888888883", copies=1)
+    assert controller.register(
+        "STUOTHER", "Other Member", "other@library.com", "passw0rd1", role="student",
+        department="CS", semester="4",
+    )
+    login_as(client, "nina@library.com", "passw0rd1")
+    assert client.post("/api/borrow", json={"student_id": "STU999", "book_id": book_id}).status_code == 200
+    with DatabaseConnection().get_connection() as conn:
+        loan_id = conn.execute(
+            "SELECT id FROM transactions WHERE student_id='STU999' AND book_id=?",
+            (book_id,),
+        ).fetchone()["id"]
+
+    client.post("/api/auth/logout")
+    login_as(client, "other@library.com", "passw0rd1")
+    assert client.post(f"/api/student/loans/{loan_id}/renew").status_code == 404
+
+    client.post("/api/auth/logout")
+    login_as(client, "nina@library.com", "passw0rd1")
+    with DatabaseConnection().get_connection() as conn:
+        conn.execute("UPDATE transactions SET due_date=DATE('now', '-1 day') WHERE id=?", (loan_id,))
+    overdue = client.post(f"/api/student/loans/{loan_id}/renew")
+    assert overdue.status_code == 409
+    assert overdue.json()["message"] == "Overdue loans cannot be renewed."

@@ -1,95 +1,88 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width,initial-scale=1">
-    <meta name="theme-color" content="#0b1020">
-    <title>Members | Northstar Library</title>
-    <link rel="stylesheet" href="../css/northstar.css">
-  </head>
-  <body data-base="../">
-    <div id="toast"></div>
-    <div class="app">
-      <aside>
-        <div class="logo">Northstar <b>Library</b></div>
-        <a class="nav" href="dashboard.html">Dashboard</a>
-        <a class="nav on" href="users.html">Members</a>
-        <div style="flex:1"></div>
-        <button class="nav" id="signout">Sign out</button>
-      </aside>
-      <main>
-        <div class="top"><h2>Members</h2><div class="who"><span id="uname"></span><div class="av" id="uav"></div></div></div>
-        <div class="panel">
-          <div class="bar"><input id="search" placeholder="Search members" aria-label="Search members"></div>
-          <div id="content">Loading members…</div>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#0b1020">
+  <title>Members | Northstar Library</title>
+  <link rel="stylesheet" href="../css/northstar.css">
+  <link rel="stylesheet" href="../css/admin-dashboard.css">
+</head>
+<body class="admin-dashboard" data-base="../" data-admin-page="users">
+  <div id="toast" class="admin-toast" role="status" aria-live="polite"></div>
+  <div class="admin-layout">
+    <aside class="admin-sidebar" id="admin-sidebar">
+      <a class="brand" href="dashboard.html" aria-label="Northstar Library dashboard"><span class="brand-mark">N</span><span>Northstar <b>Library</b></span></a>
+      <div class="side-label">WORKSPACE</div>
+      <nav class="side-nav" aria-label="Main navigation">
+        <a class="side-link" href="dashboard.html"><span class="side-icon" data-icon="grid"></span>Dashboard</a>
+        <a class="side-link" href="dashboard.html?open=books"><span class="side-icon" data-icon="book"></span>Manage Books</a>
+        <a class="side-link" href="dashboard.html#recent-loans"><span class="side-icon" data-icon="repeat"></span>All Loans</a>
+        <a class="side-link" href="dashboard.html?open=requests"><span class="side-icon" data-icon="inbox"></span>Requests</a>
+        <a class="side-link" href="dashboard.html?open=report"><span class="side-icon" data-icon="chart"></span>Reports</a>
+        <a class="side-link admin-only" data-page-view="members" href="users.html?view=members"><span class="side-icon" data-icon="users"></span>Members</a>
+        <a class="side-link admin-only" data-page-view="management" href="users.html?view=management"><span class="side-icon" data-icon="shield"></span>User Management</a>
+        <a class="side-link admin-only" href="system-settings.html"><span class="side-icon" data-icon="settings"></span>Settings</a>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="side-profile">
+          <button class="side-profile-trigger" type="button" data-page-action="admin-profile" aria-label="Open profile and security">
+            <span class="avatar admin-portal-avatar" id="side-avatar">S</span>
+            <span class="side-profile-info"><strong id="side-name">Administrator</strong><small id="side-role">Admin</small></span>
+          </button>
+          <button class="icon-button signout-icon" data-page-action="logout" aria-label="Sign out" title="Sign out"><span data-icon="logout"></span></button>
         </div>
-      </main>
-    </div>
-    <script>
-      const content = document.getElementById("content");
-      const esc = (value) =>
-        String(value ?? "").replace(/[&<>"']/g, (char) => ({
-          "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
-        })[char]);
-      const notify = (message) => {
-        const target = document.getElementById("toast");
-        target.textContent = message;
-        target.style.display = "block";
-      };
-      async function request(path, options = {}) {
-        const response = await fetch(path, {
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          ...options,
-        });
-        const result = await response.json().catch(() => ({}));
-        if (!response.ok || !result.success) {
-          const error = new Error(result.message || `Request failed (${response.status}).`);
-          error.status = response.status;
-          throw error;
-        }
-        return result;
-      }
-      let members = [];
-      function draw() {
-        const term = document.getElementById("search").value.toLowerCase();
-        const rows = members.filter((user) =>
-          `${user.user_id} ${user.name} ${user.email}`.toLowerCase().includes(term),
-        );
-        content.innerHTML = rows.length
-          ? `<table><tr><th>ID</th><th>Name</th><th>Email</th><th>Status</th></tr>${rows.map((user) => `<tr><td>${esc(user.user_id)}</td><td>${esc(user.name)}</td><td>${esc(user.email)}</td><td><span class="tag">${esc(user.status)}</span></td></tr>`).join("")}</table>`
-          : "<p>No members match your search.</p>";
-      }
-      async function load() {
-        try {
-          const current = await request("/api/auth/me");
-          if (current.data.user.role !== "admin") {
-            location.replace("../admin/dashboard.html");
-            return;
-          }
-          document.getElementById("uname").textContent = current.data.user.name;
-          document.getElementById("uav").textContent = current.data.user.name.charAt(0).toUpperCase();
-          members = (await request("/api/users?role=student")).data.users;
-          draw();
-        } catch (error) {
-          if (error.status === 401) {
-            location.replace("../login.html");
-            return;
-          }
-          notify(error.message);
-          content.textContent = error.message;
-        }
-      }
-      document.getElementById("search").oninput = draw;
-      document.getElementById("signout").onclick = async () => {
-        try {
-          await request("/api/auth/logout", { method: "POST" });
-          location.href = "../login.html";
-        } catch (error) {
-          notify(error.message);
-        }
-      };
-      load();
-    </script>
-  </body>
+      </div>
+    </aside>
+
+    <main class="admin-main">
+      <header class="admin-header">
+        <div class="header-left">
+          <button class="icon-button mobile-menu" data-page-action="toggle-sidebar" aria-label="Open navigation"><span data-icon="menu"></span></button>
+          <div class="breadcrumbs"><span>Workspace</span><span class="crumb-sep">/</span><strong id="breadcrumb-title">Members</strong></div>
+        </div>
+        <div class="header-tools">
+          <div class="global-search"><span class="search-icon" data-icon="search"></span><input id="global-search" type="search" placeholder="Search members…" aria-label="Search current page"><kbd>⌘ K</kbd></div>
+          <div class="header-date" id="header-date"></div>
+          <div class="header-divider"></div>
+          <div class="notification-wrap">
+            <button class="icon-button notification-button" data-page-action="toggle-notifications" aria-label="Notifications"><span data-icon="bell"></span><span class="notification-count" id="notification-count" hidden>0</span></button>
+            <div class="notification-popover" id="notification-popover" hidden></div>
+          </div>
+          <span class="connection-chip"><i></i><span>Live</span></span>
+          <div class="profile-wrap">
+            <button class="profile-trigger" data-page-action="toggle-profile" aria-expanded="false" aria-label="Open profile and security"><span class="avatar admin-portal-avatar" id="header-avatar">S</span><span class="profile-trigger-copy"><strong id="header-name">System Admin</strong><small id="header-role">Admin</small></span><span class="chevron" data-icon="chevron"></span></button>
+            <div class="profile-menu" id="profile-menu" hidden>
+              <div class="profile-menu-heading"><strong id="menu-name">System Admin</strong><small id="menu-email"></small></div>
+              <a class="profile-menu-item" href="system-settings.html#profile-security"><span data-icon="settings"></span>Profile &amp; Security</a>
+              <button class="profile-menu-item" data-page-action="logout"><span data-icon="logout"></span>Sign out</button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <div class="dashboard-content">
+        <section class="page-heading">
+          <div><p class="eyebrow">ACCOUNT DIRECTORY</p><h1 id="page-title">Members</h1><p class="page-subtitle" id="page-subtitle">Review student accounts and their current status.</p></div>
+          <button class="button button-gold" id="register-user-button" data-page-action="register-user"><span data-icon="user-plus"></span>Register User</button>
+        </section>
+        <section class="surface-panel user-management-panel">
+          <div class="user-toolbar">
+            <div class="table-search"><span data-icon="search"></span><input id="user-search" type="search" placeholder="Search by name, ID, or email" aria-label="Search users"></div>
+            <select id="user-role-filter" aria-label="Filter by role">
+              <option value="">All roles</option><option value="student">Students</option><option value="librarian">Librarians</option><option value="admin">Admins</option>
+            </select>
+            <select id="user-status-filter" aria-label="Filter by status">
+              <option value="">All statuses</option><option value="active">Active</option><option value="inactive">Inactive</option>
+            </select>
+          </div>
+          <div class="user-table-scroll"><table class="user-table"><thead><tr><th>NAME / ID</th><th>EMAIL</th><th>ROLE</th><th>STATUS</th><th>ACTIONS</th></tr></thead><tbody id="users-body"><tr><td colspan="5" class="empty-cell">Loading accounts…</td></tr></tbody></table></div>
+          <div class="user-list-footer" id="user-list-footer"></div>
+        </section>
+      </div>
+    </main>
+  </div>
+  <div class="modal-backdrop" id="modal-backdrop" hidden><section class="action-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"><button class="modal-close icon-button" data-page-action="close-modal" aria-label="Close"><span data-icon="close"></span></button><div id="modal-content"></div></section></div>
+  <script src="../js/admin-pages.js"></script>
+</body>
 </html>

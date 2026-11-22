@@ -19,7 +19,7 @@
 
   async function lookup(book, exclude = []) {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 30000);
+    const timeout = setTimeout(() => controller.abort(), 12000);
     try {
       const query = new URLSearchParams({
         isbn: String(book.isbn || ""),
@@ -83,14 +83,17 @@
   function placeholder(book, message = "Cover unavailable") {
     const title = escapeHtml(book.title || "Book cover");
     const status = escapeHtml(message);
-    return `<div class="cover-placeholder" role="img" aria-label="${status} for ${title}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v17H6.5A2.5 2.5 0 0 1 4 17.5z"/><path d="M4 17.5A2.5 2.5 0 0 1 6.5 15H20"/></svg><span>${status}</span></div>`;
+    const studentTitle = document.body.classList.contains("student-dashboard")
+      ? `<strong class="cover-placeholder-title">${title}</strong>`
+      : "";
+    return `<div class="cover-placeholder" role="img" aria-label="${status} for ${title}">${studentTitle}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v17H6.5A2.5 2.5 0 0 1 4 17.5z"/><path d="M4 17.5A2.5 2.5 0 0 1 6.5 15H20"/></svg><span>${status}</span></div>`;
   }
 
   function imageMarkup(book, url, alternatives = [], failed = []) {
     const title = escapeHtml(book.title || "book");
     const sources = escapeHtml(JSON.stringify(alternatives));
     const failures = escapeHtml(JSON.stringify(failed));
-    return `<img class="cover-image" src="${escapeHtml(url)}" data-cover-urls="${sources}" data-cover-failed="${failures}" alt="Cover of ${title}" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="NorthstarBookCovers.imageFailed(this)">`;
+    return `<img class="cover-image" src="${escapeHtml(url)}" data-cover-urls="${sources}" data-cover-failed="${failures}" alt="Cover of ${title}" loading="lazy" decoding="async" referrerpolicy="no-referrer" onload="NorthstarBookCovers.imageLoaded(this)" onerror="NorthstarBookCovers.imageFailed(this)">`;
   }
 
   function markup(book, className = "") {
@@ -98,9 +101,20 @@
     return `<div class="cover ${className}" data-book-cover="${Number(book.id) || ""}">${url ? imageMarkup(book, url) : placeholder(book)}</div>`;
   }
 
+  function imageLoaded(image) {
+    if (image.naturalWidth <= 1) imageFailed(image);
+  }
+
   function imageFailed(image) {
     const container = image.closest("[data-book-cover]");
     if (!container) return;
+    if (container.dataset.coverRecovery === "done") {
+      container.innerHTML = placeholder(
+        booksById.get(container.dataset.bookCover) || { title: image.alt.replace(/^Cover of /, "") },
+        "Cover unavailable",
+      );
+      return;
+    }
     const key = container.dataset.coverKey;
     const failed = JSON.parse(image.dataset.coverFailed || "[]");
     const current = image.getAttribute("src") || image.currentSrc || image.src;
@@ -147,7 +161,7 @@
     });
     const resolve = (container, book, targetRoot, callback) => {
       container.dataset.coverLookup = "done";
-      container.innerHTML = placeholder(book, "Finding cover…");
+      container.innerHTML = placeholder(book, "Loading cover…");
       findCandidates(book).then((urls) => {
         if (!urls.length) {
           container.innerHTML = placeholder(book);
@@ -184,5 +198,5 @@
     });
   }
 
-  window.NorthstarBookCovers = Object.freeze({ find, findCandidates, hydrate, imageFailed, markup });
+  window.NorthstarBookCovers = Object.freeze({ find, findCandidates, hydrate, imageLoaded, imageFailed, markup });
 })();

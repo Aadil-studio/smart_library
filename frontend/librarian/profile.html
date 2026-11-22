@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#0b1020">
+  <title>My Profile | Northstar Library</title>
+  <link rel="stylesheet" href="../css/northstar.css">
+  <link rel="stylesheet" href="../css/admin-dashboard.css">
+</head>
+<body class="admin-dashboard role-librarian" data-page="librarian-profile" data-base="../">
+  <div id="toast" class="admin-toast" role="status" aria-live="polite"></div>
+  <div class="admin-layout">
+    <aside class="admin-sidebar" id="admin-sidebar">
+      <a class="brand" href="../admin/dashboard.html" aria-label="Northstar Library dashboard">
+        <span class="brand-mark">N</span><span>Northstar <b>Library</b></span>
+      </a>
+      <div class="side-label">WORKSPACE</div>
+      <nav class="side-nav" aria-label="Main navigation">
+        <a class="side-link" href="../admin/dashboard.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>Dashboard</a>
+        <a class="side-link" href="../admin/dashboard.html?open=books"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z"/></svg>Manage Books</a>
+        <a class="side-link" href="../admin/dashboard.html#recent-loans"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="m17 2 4 4-4 4"/><path d="M3 11V9a3 3 0 0 1 3-3h15"/><path d="m7 22-4-4 4-4"/><path d="M21 13v2a3 3 0 0 1-3 3H3"/></svg>All Loans</a>
+        <a class="side-link" href="../admin/dashboard.html?open=requests"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 4h16l2 11h-6l-2 3h-4l-2-3H2L4 4Z"/><path d="M2 15v4a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-4"/></svg>Requests</a>
+        <a class="side-link" href="../admin/dashboard.html?open=report"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-5 5"/></svg>Reports</a>
+        <a class="side-link active" href="profile.html" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20 21a8 8 0 0 0-16 0"/><circle cx="12" cy="8" r="4"/></svg>My Profile</a>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="side-profile">
+          <button class="side-profile-trigger" type="button" aria-label="My profile">
+            <span class="avatar" id="side-avatar">L</span>
+            <span class="side-profile-info"><strong id="side-name">Library Desk</strong><small>Librarian</small></span>
+          </button>
+          <button class="icon-button signout-icon" id="signout-button" type="button" aria-label="Sign out" title="Sign out">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/></svg>
+          </button>
+        </div>
+      </div>
+    </aside>
+
+    <main class="admin-main">
+      <header class="admin-header">
+        <div class="header-left">
+          <button class="icon-button mobile-menu" id="menu-button" type="button" aria-label="Open navigation">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+          </button>
+          <div class="breadcrumbs"><span>Workspace</span><span class="crumb-sep">/</span><strong>Profile</strong></div>
+        </div>
+        <div class="header-tools">
+          <div class="header-date" id="header-date"></div>
+          <span class="connection-chip"><i></i><span>Online</span></span>
+          <a class="profile-trigger" href="profile.html" aria-label="My profile">
+            <span class="avatar" id="header-avatar">L</span>
+            <span class="profile-trigger-copy"><strong id="header-name">Library Desk</strong><small>Librarian</small></span>
+          </a>
+        </div>
+      </header>
+
+      <div class="dashboard-content librarian-profile-content">
+        <section class="page-heading">
+          <div><p class="eyebrow">ACCOUNT &amp; SECURITY</p><h1>My Profile</h1><p class="page-subtitle">Manage your library desk details and account access.</p></div>
+        </section>
+
+        <section class="librarian-profile-grid" aria-label="Librarian profile settings">
+          <article class="surface-panel librarian-identity-card">
+            <div class="librarian-avatar-wrap">
+              <span class="librarian-avatar-circle" id="profile-avatar">L</span>
+              <label class="librarian-camera-button" for="avatar-file" title="Change photo" aria-label="Change photo">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h-4L8 7H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2-3Z"/><circle cx="12" cy="13" r="3"/></svg>
+              </label>
+              <input id="avatar-file" class="visually-hidden" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" aria-label="Upload profile photo">
+            </div>
+            <button class="librarian-remove-avatar" id="remove-avatar" type="button" hidden>Remove photo</button>
+            <h2 id="profile-name">Library Desk</h2>
+            <span class="profile-role-badge librarian-role-badge">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 22s8-4 8-11V5l-8-3-8 3v6c0 7 8 11 8 11Z"/><path d="m9 12 2 2 4-4"/></svg>
+              Librarian
+            </span>
+            <div class="librarian-identity-details">
+              <div><small>Email</small><strong id="profile-email">—</strong></div>
+              <div><small>Staff ID</small><strong id="profile-staff-id">—</strong></div>
+              <div><small>Department</small><strong id="profile-department">Library Services</strong></div>
+              <div><small>Semester</small><strong id="profile-semester">Not applicable</strong></div>
+            </div>
+            <div class="librarian-status-pills">
+              <span class="librarian-status-pill"><i></i>Account: Active</span>
+              <span class="librarian-status-pill">Role: Desk &amp; Circulation</span>
+            </div>
+            <div class="librarian-quick-stats">
+              <div><strong id="books-borrowed">0</strong><small>Books Borrowed</small></div>
+              <div><strong>3 Books</strong><small>Borrowing Limit</small></div>
+            </div>
+          </article>
+
+          <div class="librarian-profile-forms">
+            <article class="surface-panel settings-card">
+              <div class="settings-card-heading"><div><p class="eyebrow">PERSONAL INFORMATION</p><h3>Account details</h3><p>Keep your contact details up to date.</p></div></div>
+              <form class="librarian-profile-form settings-form" id="librarian-profile-form">
+                <label>Full Name<input id="full-name" name="name" type="text" required maxlength="120" autocomplete="name"></label>
+                <label>Phone Number<input id="phone-number" name="phone" type="tel" maxlength="32" autocomplete="tel"></label>
+                <label>Email<input id="email-address" name="email" type="email" readonly></label>
+                <label>Role<input value="Librarian" type="text" readonly></label>
+                <button class="button button-violet settings-submit librarian-submit" type="submit">Save Changes</button>
+              </form>
+            </article>
+
+            <article class="surface-panel settings-card">
+              <div class="settings-card-heading"><div><p class="eyebrow">SECURITY</p><h3>Change password</h3><p>Use a secure password with at least 8 characters, including a letter and a number.</p></div></div>
+              <form class="librarian-profile-form librarian-password-form settings-form" id="librarian-password-form">
+                <label>Current Password<span class="librarian-password-field"><input name="current_password" type="password" required autocomplete="current-password"><button class="password-toggle" type="button" data-password-toggle aria-label="Show current password"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg></button></span></label>
+                <label>New Password<span class="librarian-password-field"><input name="new_password" type="password" required minlength="8" autocomplete="new-password"><button class="password-toggle" type="button" data-password-toggle aria-label="Show new password"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg></button></span></label>
+                <label>Confirm New Password<span class="librarian-password-field"><input name="confirm_password" type="password" required minlength="8" autocomplete="new-password"><button class="password-toggle" type="button" data-password-toggle aria-label="Show confirmation password"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg></button></span></label>
+                <button class="button button-violet settings-submit librarian-submit" type="submit">Update Password</button>
+              </form>
+            </article>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+  <script src="../js/librarian-profile.js"></script>
+</body>
+</html>

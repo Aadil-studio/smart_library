@@ -20,17 +20,20 @@
         <a class="side-link active" href="dashboard.html"><span class="side-icon" data-icon="grid"></span>Dashboard</a>
         <button class="side-link" data-action="manage-books"><span class="side-icon" data-icon="book"></span>Manage Books<span class="side-chevron">+</span></button>
         <a class="side-link" href="#recent-loans"><span class="side-icon" data-icon="repeat"></span>All Loans</a>
-        <a class="side-link" href="#pending-requests"><span class="side-icon" data-icon="inbox"></span>Requests<span class="side-count" id="request-nav-count">0</span></a>
-        <a class="side-link admin-only" href="users.html"><span class="side-icon" data-icon="users"></span>Members</a>
+        <a class="side-link" href="#pending-requests" data-action="show-requests"><span class="side-icon" data-icon="inbox"></span>Requests<span class="side-count" id="request-nav-count">0</span></a>
+        <a class="side-link admin-only" href="users.html?view=members"><span class="side-icon" data-icon="users"></span>Members</a>
         <button class="side-link" data-action="report"><span class="side-icon" data-icon="chart"></span>Reports</button>
-        <a class="side-link admin-only" href="users.html"><span class="side-icon" data-icon="shield"></span>User Management</a>
+        <a class="side-link librarian-only" href="../librarian/profile.html"><span class="side-icon" data-icon="user"></span>My Profile</a>
+        <a class="side-link admin-only" href="users.html?view=management"><span class="side-icon" data-icon="shield"></span>User Management</a>
         <a class="side-link admin-only" href="system-settings.html"><span class="side-icon" data-icon="settings"></span>Settings</a>
       </nav>
       <div class="sidebar-bottom">
-        <div class="sidebar-status"><span class="status-dot"></span><span id="sidebar-status">Connecting to library</span></div>
+        <div class="sidebar-status"><span class="status-dot"></span><span id="sidebar-status"></span></div>
         <div class="side-profile">
-          <div class="avatar" id="side-avatar">A</div>
-          <div class="side-profile-info"><strong id="side-name">Administrator</strong><small id="side-role">Administrator</small></div>
+          <button class="side-profile-trigger" type="button" data-action="profile-settings" aria-label="Open profile and settings">
+            <span class="avatar admin-portal-avatar" id="side-avatar">S</span>
+            <span class="side-profile-info"><strong id="side-name">System Admin</strong><small id="side-role">Admin Portal</small></span>
+          </button>
           <button class="icon-button signout-icon" data-action="logout" aria-label="Sign out" title="Sign out"><span data-icon="logout"></span></button>
         </div>
       </div>
@@ -57,13 +60,14 @@
             </button>
             <div class="notification-popover" id="notification-popover" hidden></div>
           </div>
-          <span class="connection-chip"><i></i><span id="connection-label">Live</span></span>
+          <span class="connection-chip"><i></i><span id="connection-label">Online</span></span>
           <div class="profile-wrap">
-            <button class="profile-trigger" data-action="toggle-profile" aria-expanded="false">
-              <span class="avatar" id="header-avatar">A</span><span class="profile-trigger-copy"><strong id="header-name">Administrator</strong><small id="header-role">Admin</small></span><span class="chevron" data-icon="chevron"></span>
+            <button class="profile-trigger" data-action="toggle-profile" aria-expanded="false" aria-label="Open profile and security">
+              <span class="avatar admin-portal-avatar" id="header-avatar">S</span><span class="profile-trigger-copy"><strong id="header-name">System Admin</strong><small id="header-role">Admin Portal</small></span><span class="chevron" data-icon="chevron"></span>
             </button>
             <div class="profile-menu" id="profile-menu" hidden>
               <div class="profile-menu-heading"><strong id="menu-name">Administrator</strong><small id="menu-email"></small></div>
+              <button class="profile-menu-item librarian-only" data-action="profile-settings"><span data-icon="settings"></span>Profile &amp; Settings</button>
               <a class="profile-menu-item admin-only" href="system-settings.html"><span data-icon="settings"></span>Settings</a>
               <button class="profile-menu-item" data-action="logout"><span data-icon="logout"></span>Sign out</button>
             </div>
@@ -80,11 +84,13 @@
         <section class="welcome-banner" aria-labelledby="welcome-title">
           <div class="welcome-copy">
             <div class="welcome-kicker"><span data-icon="sparkles"></span> YOUR LIBRARY, AT A GLANCE</div>
-            <h2 id="welcome-title">Welcome back, <span id="welcome-name">Administrator</span>!</h2>
+            <div class="welcome-title-row"><h2 id="welcome-title">Welcome back, <span id="welcome-name">Administrator</span>!</h2><span class="welcome-avatar librarian-only" id="welcome-avatar">L</span></div>
             <p>Monitor your library, manage members, and keep every operation running smoothly.</p>
-            <div class="welcome-actions">
-              <button class="button button-gold" data-action="manage-books"><span data-icon="book"></span>Manage books</button>
-              <button class="button button-glass" data-action="report"><span data-icon="chart"></span>View reports</button>
+            <div class="command-actions" aria-label="Quick actions">
+              <button class="command-pill command-pill-primary" data-action="add-book"><span data-icon="plus"></span>Add Book</button>
+              <button class="command-pill admin-only" data-action="register-member"><span data-icon="user-plus"></span>Register Member</button>
+              <button class="command-pill" data-action="issue-return"><span data-icon="repeat"></span>Issue / Return</button>
+              <button class="command-pill" data-action="report"><span data-icon="chart"></span>View Reports</button>
             </div>
           </div>
           <div class="welcome-art" aria-hidden="true">
@@ -100,17 +106,17 @@
             <div class="workbench-actions">
               <button class="button button-violet" data-action="issue-book"><span data-icon="repeat"></span>Issue book</button>
               <button class="button button-blue" data-action="return-book"><span data-icon="check"></span>Return book</button>
+              <button class="button button-quiet" data-action="add-book"><span data-icon="plus"></span>Add Book</button>
             </div>
           </div>
           <div class="workbench-grid">
-            <article class="surface-panel operations-today" id="operations-today"></article>
             <article class="surface-panel member-workbench">
               <div class="panel-heading"><div><p class="eyebrow">MEMBER DESK</p><h3>Search members</h3></div><span class="panel-icon" data-icon="users"></span></div>
               <div class="member-search"><span data-icon="search"></span><input id="member-search" type="search" placeholder="Name or student ID" autocomplete="off"></div>
               <div class="member-results" id="member-results"></div>
             </article>
             <article class="surface-panel fine-workbench">
-              <div class="panel-heading"><div><p class="eyebrow">CASH DESK</p><h3>Pending fines</h3></div><span class="widget-count" id="fine-workbench-count">0</span></div>
+              <div class="panel-heading"><div><p class="eyebrow">CASH DESK</p><h3>Pending fines</h3></div><button class="text-action" data-action="show-fines">Collect / View Fines</button><span class="widget-count" id="fine-workbench-count">0</span></div>
               <div class="fine-list" id="fine-workbench-list"></div>
             </article>
           </div>
@@ -148,12 +154,12 @@
         <section class="section-block" id="recent-loans">
           <div class="section-heading"><div><p class="eyebrow">CIRCULATION</p><h2>Recent loans</h2><p class="section-subtitle">Track issues, due dates, and returns across your library.</p></div><button class="text-action" data-action="show-all-loans">View all loans <span data-icon="arrow"></span></button></div>
           <article class="surface-panel table-panel">
-            <div class="table-toolbar"><div class="table-search"><span data-icon="search"></span><input id="loan-search" type="search" placeholder="Search loans or members…" aria-label="Search loans or members"></div><select id="loan-status" aria-label="Filter loans by status"><option value="all">All statuses</option><option value="issued">Issued</option><option value="overdue">Overdue</option><option value="returned">Returned</option></select></div>
+            <div class="table-toolbar"><div class="table-search"><span data-icon="search"></span><input id="loan-search" type="search" placeholder="Search loans or members…" aria-label="Search loans or members"></div><div class="loan-toolbar-actions"><select id="loan-status" aria-label="Filter loans by status"><option value="all">All statuses</option><option value="issued">Issued</option><option value="overdue">Overdue</option><option value="returned">Returned</option></select><button class="button button-quiet export-csv-button" type="button" data-action="export-loans">Export CSV</button></div></div>
             <div class="table-scroll"><table class="loans-table"><thead><tr><th>BOOK</th><th>MEMBER</th><th>ISSUED</th><th>DUE DATE</th><th>RETURNED</th><th>STATUS</th><th></th></tr></thead><tbody id="loans-body"><tr><td colspan="7" class="empty-cell">Loading live loan records…</td></tr></tbody></table></div>
           </article>
         </section>
 
-        <section class="section-block two-column-section">
+        <section class="section-block two-column-section dashboard-duplicate-widgets" aria-hidden="true">
           <article class="surface-panel widget-panel" id="pending-requests">
             <div class="panel-heading"><div><p class="eyebrow">NEEDS ATTENTION</p><h3>Pending requests</h3><p>Review member borrowing requests.</p></div><span class="widget-count" id="pending-count">0</span></div>
             <div class="request-list" id="request-list"><div class="widget-loading">Loading requests…</div></div>
@@ -182,18 +188,7 @@
           </article>
         </section>
 
-        <section class="section-block quick-section">
-          <div class="section-heading"><div><p class="eyebrow">SHORTCUTS</p><h2>Quick actions</h2></div></div>
-          <div class="quick-actions">
-            <button class="quick-action" data-action="add-book"><span class="quick-icon gold-icon" data-icon="book-plus"></span><span><strong>Add a book</strong><small>Expand the catalog</small></span><span class="quick-arrow" data-icon="arrow"></span></button>
-            <button class="quick-action admin-only" data-action="register-member"><span class="quick-icon blue-icon" data-icon="user-plus"></span><span><strong>Register a member</strong><small>Create a student account</small></span><span class="quick-arrow" data-icon="arrow"></span></button>
-            <button class="quick-action" data-action="issue-book"><span class="quick-icon violet-icon" data-icon="repeat"></span><span><strong>Issue a book</strong><small>Start a new loan</small></span><span class="quick-arrow" data-icon="arrow"></span></button>
-            <button class="quick-action" data-action="return-book"><span class="quick-icon green-icon" data-icon="check"></span><span><strong>Return a book</strong><small>Close an active loan</small></span><span class="quick-arrow" data-icon="arrow"></span></button>
-            <button class="quick-action" data-action="scroll-requests"><span class="quick-icon violet-icon" data-icon="inbox"></span><span><strong>Manage requests</strong><small>Review the queue</small></span><span class="quick-arrow" data-icon="arrow"></span></button>
-            <button class="quick-action" data-action="report"><span class="quick-icon blue-icon" data-icon="chart"></span><span><strong>Generate report</strong><small>Print a live summary</small></span><span class="quick-arrow" data-icon="arrow"></span></button>
-          </div>
-        </section>
-        <footer class="dashboard-footer"><span>Northstar Library Management</span><span id="last-updated">Live data from your library database</span></footer>
+        <footer class="dashboard-footer"><span>Northstar Library Management</span></footer>
       </div>
     </main>
   </div>

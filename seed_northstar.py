@@ -1,5 +1,34 @@
 """Idempotently add the Northstar frontend catalog to the active SQLite database."""
-from controllers.app_controller import LibraryController
+import argparse
+import os
+import sqlite3
+
+ADDITIONAL_BOOKS = (
+    ("Clean Architecture", "Robert C. Martin", "9780134494166", "Software Engineering", 3),
+    ("Designing Data-Intensive Applications", "Martin Kleppmann", "9781449373320", "Databases", 2),
+    ("Refactoring", "Martin Fowler", "9780134757599", "Software Engineering", 2),
+    ("Deep Learning", "Ian Goodfellow", "9780262035613", "Artificial Intelligence", 2),
+    ("Hands-On Machine Learning", "Aurélien Géron", "9781098125974", "Artificial Intelligence", 3),
+    ("You Don't Know JS Yet", "Kyle Simpson", "9781091210099", "Programming", 4),
+    ("Eloquent JavaScript", "Marijn Haverbeke", "9781593279509", "Programming", 3),
+    ("Fluent Python", "Luciano Ramalho", "9781492056355", "Programming", 2),
+    ("System Design Interview", "Alex Xu", "9781736049112", "Software Engineering", 3),
+    ("Computer Organization and Design", "David A. Patterson", "9780124077263", "Computer Science", 2),
+    ("Modern Operating Systems", "Andrew S. Tanenbaum", "9780133591620", "Operating Systems", 2),
+    ("Cryptography and Network Security", "William Stallings", "9780134444284", "Cybersecurity", 3),
+    ("The Web Application Hacker's Handbook", "Dafydd Stuttard", "9781118026472", "Cybersecurity", 2),
+    ("Head First Design Patterns", "Eric Freeman", "9781492078005", "Software Engineering", 3),
+    ("Structure and Interpretation of Computer Programs", "Harold Abelson", "9780262510875", "Computer Science", 2),
+    ("TCP/IP Illustrated, Vol. 1", "W. Richard Stevens", "9780321336316", "Networking", 2),
+    ("Code: The Hidden Language", "Charles Petzold", "9780137909100", "Computer Science", 4),
+    ("Grokking Algorithms", "Aditya Bhargava", "9781617292231", "Computer Science", 3),
+    ("The Phoenix Project", "Gene Kim, Kevin Behr, George Spafford", "9780988262591", "Software Engineering", 2),
+    ("Database Internals", "Alex Petrov", "9781492040347", "Databases", 2),
+)
+
+COVER_URL_OVERRIDES = {
+    "9780988262591": "https://covers.openlibrary.org/b/isbn/9781942788294-L.jpg",
+}
 
 RAW = (
     "Atomic Habits|James Clear|Self-Help|2018;"
@@ -68,7 +97,88 @@ RAW = (
 )
 
 
+def normalized_isbn(value):
+    return "".join(character for character in value.casefold() if character.isalnum())
+
+
+def seed_additional_books():
+    db_path = os.environ.get("LIBRARY_DB_PATH", "library.db")
+    connection = sqlite3.connect(db_path, timeout=30)
+    added = 0
+    skipped = 0
+
+    try:
+        connection.execute("BEGIN IMMEDIATE")
+        existing = connection.execute("SELECT title, isbn FROM books").fetchall()
+        titles = {row[0].strip().casefold() for row in existing if row[0]}
+        isbns = {normalized_isbn(row[1]) for row in existing if row[1]}
+
+        for index, (title, author, isbn, category, copies) in enumerate(ADDITIONAL_BOOKS, start=1):
+            title_key = title.strip().casefold()
+            isbn_key = normalized_isbn(isbn)
+            cover_url = COVER_URL_OVERRIDES.get(
+                isbn,
+                f"https://covers.openlibrary.org/b/isbn/{isbn}-L.jpg",
+            )
+            if title_key in titles or isbn_key in isbns:
+                if isbn in COVER_URL_OVERRIDES:
+                    connection.execute(
+                        """UPDATE books SET cover_url=?
+                           WHERE title=? AND isbn=? AND COALESCE(cover_url, '')<>?""",
+                        (cover_url, title, isbn, cover_url),
+                    )
+                skipped += 1
+                continue
+
+            cursor = connection.execute(
+                """INSERT OR IGNORE INTO books (
+                       isbn, title, author, category, publisher, edition, publication_year,
+                       total_copies, available_copies, shelf_no, is_available, description,
+                       status, created_at, fee, cover_url
+                   ) VALUES (?, ?, ?, ?, '', '', NULL, ?, ?, ?, 1, '', 'active',
+                             CURRENT_TIMESTAMP, 4000, ?)""",
+                (
+                    isbn,
+                    title,
+                    author,
+                    category,
+                    copies,
+                    copies,
+                    f"N-{(index - 1) // 10 + 3}",
+                    cover_url,
+                ),
+            )
+            if cursor.rowcount:
+                titles.add(title_key)
+                isbns.add(isbn_key)
+                added += 1
+            else:
+                skipped += 1
+
+        connection.commit()
+        total = connection.execute("SELECT COUNT(*) FROM books").fetchone()[0]
+        print(f"Additional catalog seed complete: added {added} books, skipped {skipped} duplicates; {total} books total.")
+    except Exception:
+        connection.rollback()
+        raise
+    finally:
+        connection.close()
+
+
 def main():
+    parser = argparse.ArgumentParser(description="Seed the Northstar Library catalog.")
+    parser.add_argument(
+        "--additional-books",
+        action="store_true",
+        help="Insert only the 20 approved additional titles without altering the existing catalog.",
+    )
+    args = parser.parse_args()
+    if args.additional_books:
+        seed_additional_books()
+        return
+
+    from controllers.app_controller import LibraryController
+
     controller = LibraryController()
     existing = {
         (book["title"].casefold(), book["author"].casefold(), (book.get("category") or "").casefold())

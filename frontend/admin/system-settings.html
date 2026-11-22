@@ -1,107 +1,120 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width,initial-scale=1">
-    <meta name="theme-color" content="#0b1020">
-    <title>System settings | Northstar Library</title>
-    <link rel="stylesheet" href="../css/northstar.css">
-  </head>
-  <body data-base="../">
-    <div id="toast"></div>
-    <div class="app">
-      <aside>
-        <div class="logo">Northstar <b>Library</b></div>
-        <a class="nav" href="dashboard.html">Dashboard</a>
-        <a class="nav" href="users.html">Members</a>
-        <a class="nav on" href="system-settings.html">System settings</a>
-        <div style="flex:1"></div>
-        <button class="nav" id="signout">Sign out</button>
-      </aside>
-      <main>
-        <div class="top"><h2>System settings</h2><div class="who"><span id="uname"></span><div class="av" id="uav"></div></div></div>
-        <div class="panel">
-          <h3>Library defaults</h3>
-          <form id="settings" class="row2">
-            <label>Library name<input id="library_name" required></label>
-            <label>Loan period (days)<input id="loan_period_days" type="number" min="1" max="90" required></label>
-            <label>Fine per day (Rs.)<input id="fine_per_day" type="number" min="0" max="1000" required></label>
-            <label>Book fee per issue (Rs.)<input id="book_fee" type="number" min="0" max="100000" required></label>
-            <label>Due-soon reminder (days)<input id="due_soon_days" type="number" min="0" max="365" required></label>
-            <button class="btn">Save settings</button>
-          </form>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#0b1020">
+  <title>Settings | Northstar Library</title>
+  <link rel="stylesheet" href="../css/northstar.css">
+  <link rel="stylesheet" href="../css/admin-dashboard.css">
+</head>
+<body class="admin-dashboard" data-base="../" data-admin-page="settings">
+  <div id="toast" class="admin-toast" role="status" aria-live="polite"></div>
+  <div class="admin-layout">
+    <aside class="admin-sidebar" id="admin-sidebar">
+      <a class="brand" href="dashboard.html" aria-label="Northstar Library dashboard"><span class="brand-mark">N</span><span>Northstar <b>Library</b></span></a>
+      <div class="side-label">WORKSPACE</div>
+      <nav class="side-nav" aria-label="Main navigation">
+        <a class="side-link" href="dashboard.html"><span class="side-icon" data-icon="grid"></span>Dashboard</a>
+        <a class="side-link" href="dashboard.html?open=books"><span class="side-icon" data-icon="book"></span>Manage Books</a>
+        <a class="side-link" href="dashboard.html#recent-loans"><span class="side-icon" data-icon="repeat"></span>All Loans</a>
+        <a class="side-link" href="dashboard.html?open=requests"><span class="side-icon" data-icon="inbox"></span>Requests</a>
+        <a class="side-link" href="dashboard.html?open=report"><span class="side-icon" data-icon="chart"></span>Reports</a>
+        <a class="side-link admin-only" href="users.html?view=members"><span class="side-icon" data-icon="users"></span>Members</a>
+        <a class="side-link admin-only" href="users.html?view=management"><span class="side-icon" data-icon="shield"></span>User Management</a>
+        <a class="side-link admin-only active" href="system-settings.html"><span class="side-icon" data-icon="settings"></span>Settings</a>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="side-profile">
+          <button class="side-profile-trigger" type="button" data-page-action="admin-profile" aria-label="Open profile and security">
+            <span class="avatar admin-portal-avatar" id="side-avatar">S</span>
+            <span class="side-profile-info"><strong id="side-name">Administrator</strong><small id="side-role">Admin</small></span>
+          </button>
+          <button class="icon-button signout-icon" data-page-action="logout" aria-label="Sign out" title="Sign out"><span data-icon="logout"></span></button>
         </div>
-      </main>
-    </div>
-    <script>
-      const form = document.getElementById("settings");
-      const toast = (message) => {
-        const target = document.getElementById("toast");
-        target.textContent = message;
-        target.style.display = "block";
-      };
-      async function request(path, options = {}) {
-        const response = await fetch(path, {
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          ...options,
-        });
-        const result = await response.json().catch(() => ({}));
-        if (!response.ok || !result.success) {
-          const error = new Error(result.message || `Request failed (${response.status}).`);
-          error.status = response.status;
-          throw error;
-        }
-        return result;
-      }
-      async function load() {
-        try {
-          const current = await request("/api/auth/me");
-          if (current.data.user.role !== "admin") {
-            location.replace("../admin/dashboard.html");
-            return;
-          }
-          document.getElementById("uname").textContent = current.data.user.name;
-          document.getElementById("uav").textContent = current.data.user.name.charAt(0).toUpperCase();
-          const settings = (await request("/api/settings")).data;
-          for (const [key, value] of Object.entries(settings)) {
-            if (document.getElementById(key)) document.getElementById(key).value = value;
-          }
-        } catch (error) {
-          if (error.status === 401) {
-            location.replace("../login.html");
-            return;
-          }
-          toast(error.message);
-        }
-      }
-      form.onsubmit = async (event) => {
-        event.preventDefault();
-        try {
-          await request("/api/settings", {
-            method: "PUT",
-            body: JSON.stringify({
-              library_name: document.getElementById("library_name").value,
-              loan_period_days: Number(document.getElementById("loan_period_days").value),
-              fine_per_day: Number(document.getElementById("fine_per_day").value),
-              book_fee: Number(document.getElementById("book_fee").value),
-              due_soon_days: Number(document.getElementById("due_soon_days").value),
-            }),
-          });
-          toast("Settings saved.");
-        } catch (error) {
-          toast(error.message);
-        }
-      };
-      document.getElementById("signout").onclick = async () => {
-        try {
-          await request("/api/auth/logout", { method: "POST" });
-          location.href = "../login.html";
-        } catch (error) {
-          toast(error.message);
-        }
-      };
-      load();
-    </script>
-  </body>
+      </div>
+    </aside>
+
+    <main class="admin-main">
+      <header class="admin-header">
+        <div class="header-left">
+          <button class="icon-button mobile-menu" data-page-action="toggle-sidebar" aria-label="Open navigation"><span data-icon="menu"></span></button>
+          <div class="breadcrumbs"><span>Workspace</span><span class="crumb-sep">/</span><strong>Settings</strong></div>
+        </div>
+        <div class="header-tools">
+          <div class="global-search"><span class="search-icon" data-icon="search"></span><input id="global-search" type="search" placeholder="Search settings…" aria-label="Search settings"><kbd>⌘ K</kbd></div>
+          <div class="header-date" id="header-date"></div>
+          <div class="header-divider"></div>
+          <div class="notification-wrap">
+            <button class="icon-button notification-button" data-page-action="toggle-notifications" aria-label="Notifications"><span data-icon="bell"></span><span class="notification-count" id="notification-count" hidden>0</span></button>
+            <div class="notification-popover" id="notification-popover" hidden></div>
+          </div>
+          <span class="connection-chip"><i></i><span>Live</span></span>
+          <div class="profile-wrap">
+            <button class="profile-trigger" data-page-action="toggle-profile" aria-expanded="false" aria-label="Open profile and security"><span class="avatar admin-portal-avatar" id="header-avatar">S</span><span class="profile-trigger-copy"><strong id="header-name">System Admin</strong><small id="header-role">Admin</small></span><span class="chevron" data-icon="chevron"></span></button>
+            <div class="profile-menu" id="profile-menu" hidden>
+              <div class="profile-menu-heading"><strong id="menu-name">System Admin</strong><small id="menu-email"></small></div>
+              <a class="profile-menu-item" href="#profile-security"><span data-icon="settings"></span>Profile &amp; Security</a>
+              <button class="profile-menu-item" data-page-action="logout"><span data-icon="logout"></span>Sign out</button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <div class="dashboard-content">
+        <section class="page-heading">
+          <div><p class="eyebrow">LIBRARY CONFIGURATION</p><h1>System settings</h1><p class="page-subtitle">Manage the library defaults and your administrator account.</p></div>
+        </section>
+        <div class="settings-page-grid">
+          <section class="surface-panel settings-card">
+            <div class="panel-heading settings-card-heading"><div><p class="eyebrow">CIRCULATION &amp; FEES</p><h3>Library defaults</h3><p>These values guide current and future loans.</p></div><span class="panel-icon" data-icon="settings"></span></div>
+            <form id="library-settings-form" class="settings-form">
+              <label>Library name<input id="library_name" required maxlength="60"></label>
+              <label>Loan period (days)<input id="loan_period_days" type="number" min="1" max="90" required></label>
+              <label>Fine per day (Rs.)<input id="fine_per_day" type="number" min="0" max="1000" required></label>
+              <label>Book fee per issue (Rs.)<input id="book_fee" type="number" min="0" max="100000" required></label>
+              <label>Due-soon reminder (days)<input id="due_soon_days" type="number" min="0" max="365" required></label>
+              <button class="button button-gold settings-submit" type="submit"><span data-icon="check"></span>Save Library Defaults</button>
+            </form>
+          </section>
+
+          <section class="surface-panel settings-card admin-security-card" id="profile-security">
+            <div class="panel-heading settings-card-heading"><div><p class="eyebrow">ADMINISTRATOR</p><h3>Profile &amp; Security</h3><p>Update your display name, email, or password.</p></div><span class="panel-icon" data-icon="shield"></span></div>
+            <div class="admin-avatar-settings">
+              <div class="admin-avatar-wrap">
+                <span class="admin-avatar-circle" id="admin-profile-avatar">S</span>
+                <button class="admin-avatar-camera" id="admin-avatar-camera" type="button" aria-label="Choose administrator photo"><span data-icon="camera"></span></button>
+              </div>
+              <div class="admin-avatar-copy">
+                <strong>Administrator Photo</strong>
+                <small>JPG, PNG or WEBP up to 2MB</small>
+                <div class="admin-avatar-actions">
+                  <button class="button button-quiet" id="admin-avatar-upload" type="button">Upload / Change Photo</button>
+                  <button class="button button-quiet admin-avatar-remove" id="admin-avatar-remove" type="button" hidden>Remove</button>
+                </div>
+              </div>
+              <input class="admin-avatar-file" id="admin-avatar-file" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" aria-label="Upload administrator photo">
+            </div>
+            <form id="admin-profile-form" class="settings-form">
+              <label>Display Name<input id="admin-display-name" name="name" type="text" required maxlength="120" autocomplete="name"></label>
+              <label>Email (Gmail)<input id="admin-email" name="email" type="email" required maxlength="254" autocomplete="email"></label>
+              <div class="profile-role-row"><span>Role</span><span class="profile-role-badge"><span data-icon="shield"></span>Administrator</span></div>
+              <button class="button button-gold settings-submit" type="submit"><span data-icon="check"></span>Save Profile</button>
+            </form>
+            <div class="settings-section-divider"></div>
+            <form id="admin-password-form" class="settings-form">
+              <h4>Change Password</h4>
+              <label>Current Password<span class="password-field"><input id="admin-current-password" name="current_password" type="password" required autocomplete="current-password"><button class="password-toggle" type="button" data-password-toggle="admin-current-password" aria-label="Show password"><span data-icon="eye"></span></button></span></label>
+              <label>New Password<span class="password-field"><input id="admin-new-password" name="new_password" type="password" minlength="8" required autocomplete="new-password"><button class="password-toggle" type="button" data-password-toggle="admin-new-password" aria-label="Show password"><span data-icon="eye"></span></button></span></label>
+              <label>Confirm New Password<span class="password-field"><input id="admin-confirm-password" name="confirm_password" type="password" minlength="8" required autocomplete="new-password"><button class="password-toggle" type="button" data-password-toggle="admin-confirm-password" aria-label="Show password"><span data-icon="eye"></span></button></span></label>
+              <button class="button button-violet settings-submit" type="submit"><span data-icon="shield"></span>Update Password</button>
+            </form>
+          </section>
+        </div>
+        <footer class="dashboard-footer"><span>Northstar Library Management</span><span>Account and library preferences</span></footer>
+      </div>
+    </main>
+  </div>
+  <script src="../js/admin-pages.js"></script>
+</body>
 </html>

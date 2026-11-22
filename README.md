@@ -24,7 +24,7 @@ and a **Strategy** pattern fine engine.
 | --- | --- |
 | Authentication | Register, login (student ID *or* email), logout, secure session cookies, show/hide password |
 | Password security | Werkzeug PBKDF2/scrypt hashing; legacy SHA-256 hashes are upgraded automatically on login |
-| Forgot password | Email → OTP (hashed, 10-minute expiry, single use) → verify → reset. Dev mode shows the code; SMTP supported |
+| Forgot password | Email → OTP (hashed, 10-minute expiry, single use) → verify → reset. SMTP delivery, resend cooldowns, and attempt limits |
 | Roles | `student`, `librarian`, `admin` — enforced on the **backend** for every API call |
 | Books | Full CRUD, search (title/author/ISBN/category/publisher), category/availability filters, shelf/rack, description, safe copy accounting |
 | Borrow / Return | Issue with due dates, duplicate-loan & zero-copy protection, automatic availability updates, overdue detection, fine calculation (Strategy pattern) |
@@ -108,13 +108,17 @@ copy .env.example .env
 | `HOST` / `PORT` / `APP_DEBUG` | Server options (defaults: 127.0.0.1:8000, debug off) |
 | `SESSION_COOKIE_SECURE` | Defaults to `1`; keep enabled when serving over HTTPS |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | First admin account, used only when the database has no admin |
-| `OTP_DEV_MODE` | Defaults to `0`; only `1` returns password-reset OTPs in the API response |
-| `SMTP_HOST`/`SMTP_PORT`/`SMTP_FROM`/`SMTP_USER`/`SMTP_PASS` | Email real OTP codes instead of dev mode |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_FROM` | SMTP server, port, and sender address for password-reset codes |
+| `SMTP_USER` / `SMTP_PASS` | SMTP credentials when required by the provider |
 | `APP_BASE_URL` | Public HTTPS URL used to build password-reset email links |
 | `LIBRARY_DB_PATH` | Override the database file location |
 
 Set `SECRET_KEY` to a new random value. Configure `ADMIN_EMAIL` and `ADMIN_PASSWORD`
 before the first start of an empty database. Never commit a real `.env`.
+For Gmail, set `SMTP_FROM` and `SMTP_USER` to the authorized Gmail sender and use a
+Google App Password as `SMTP_PASS`. The admin-only `/api/auth/email-config` endpoint
+reports which settings are detected and whether the active `.env` exists, without
+returning any values.
 
 ## 8. Running the Application
 
@@ -146,9 +150,11 @@ Authentication uses the session cookie; roles are enforced server-side.
 | POST | `/api/auth/login` | public | Login with email **or** student ID |
 | POST | `/api/auth/logout` | auth | Destroy the session |
 | GET | `/api/auth/me` | any | Current session user |
-| POST | `/api/auth/forgot-password` | public | Generate a hashed, expiring OTP (dev mode returns `data.dev_otp`) |
-| POST | `/api/auth/verify-otp` | public | Verify the code |
-| POST | `/api/auth/reset-password` | public | Set a new password using the code |
+| POST | `/api/auth/forgot-password` | public | Generate a hashed, expiring OTP and send it by email |
+| POST | `/api/auth/resend-otp` | public | Send a new code, subject to cooldown and rate limits |
+| POST | `/api/auth/verify-otp` | public | Verify the code once and issue a short-lived reset token |
+| POST | `/api/auth/reset-password` | public | Set a new password using the short-lived verified reset token |
+| GET | `/api/auth/email-config` | admin | Inspect SMTP configuration presence and source without exposing values |
 
 ### Books
 | Method | Endpoint | Access |
@@ -234,7 +240,7 @@ dashboards and reports — all against an isolated in-memory database.
 | `Cannot reach the library server` toast | Start the FastAPI process with `python main.py` |
 | Redirected to login immediately | Your session expired; sign in again |
 | `database is locked` | The app already enables WAL + busy timeout; close other processes using `library.db` |
-| OTP email not arriving | SMTP isn't configured; with `OTP_DEV_MODE=1` the code is shown on the OTP page instead |
+| OTP email not arriving | Sign in as admin and check `/api/auth/email-config`; configure missing SMTP values in the project-root `.env` and restart the server |
 | Forgot the admin password | Use the configured password-reset email flow; preserve the database and contact the system administrator if SMTP is unavailable |
 | Port 8000 already in use | Change `PORT` in `.env` and restart |
 | Tests fail on first run | Ensure the venv is activated and `pip install -r requirements.txt` succeeded |
