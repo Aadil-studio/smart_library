@@ -78,36 +78,72 @@ class UserDAO:
         self.log_activity(user_id, name, "REGISTRATION", f"Registered as {role}")
         return True, "User registered successfully."
 
-    def get_user_by_credential(self, credential):
+    def get_users_by_credential(self, credential):
         cursor = self.db.cursor()
-        cursor.execute("SELECT * FROM users WHERE email=? OR user_id=?", (credential, credential))
-        return cursor.fetchone()
+        cursor.execute(
+            """SELECT * FROM users
+               WHERE LOWER(email)=LOWER(?)
+                  OR REPLACE(LOWER(user_id), '/', '-')=REPLACE(LOWER(?), '/', '-')
+               ORDER BY id""",
+            (credential, credential),
+        )
+        users = list(cursor.fetchall())
+        seen_user_ids = {user["user_id"].casefold() for user in users}
 
-    def authenticate(self, credential, password):
-        user = self.get_user_by_credential(str(credential).strip())
-        if not user:
-            return None
-        if user["status"] != "active":
-            return None
-        if not self._verify_password(user["password"], password):
-            return None
+        cursor.execute(
+            """SELECT users.* FROM users
+               JOIN user_login_aliases ON user_login_aliases.user_id=users.user_id
+               WHERE REPLACE(LOWER(user_login_aliases.alias), '/', '-') =
+                     REPLACE(LOWER(?), '/', '-')
+               ORDER BY users.id""",
+            (credential,),
+        )
+        for user in cursor.fetchall():
+            user_id = user["user_id"].casefold()
+            if user_id not in seen_user_ids:
+                users.append(user)
+                seen_user_ids.add(user_id)
+        return users
+
+    def get_user_by_credential(self, credential):
+        users = self.get_users_by_credential(credential)
+        return users[0] if users else None
+
+    def _find_authenticated_user(self, credential, password):
+        users = self.get_users_by_credential(credential)
+        if not users:
+            return None, "Account not found."
+
+        disabled_match = False
+        for user in users:
+            if not self._verify_password(user["password"], password):
+                continue
+            if user["status"] != "active":
+                disabled_match = True
+                continue
+            return user, None
+
+        if disabled_match:
+            return None, "Your account has been disabled. Please contact the library administrator."
+        return None, "Incorrect password."
+
+    def _finish_authentication(self, user, password):
         if user["password"].startswith(("pbkdf2:", "scrypt:")) is False:
             self._upgrade_legacy_hash(user["user_id"], password)
         self.log_activity(user["user_id"], user["name"], "LOGIN", "User logged in successfully")
         return self._public_user(user)
 
-    def authenticate_with_reason(self, credential, password):
-        user = self.get_user_by_credential(str(credential).strip())
+    def authenticate(self, credential, password):
+        user, _ = self._find_authenticated_user(str(credential).strip(), password)
         if not user:
-            return None, "Account not found."
-        if user["status"] != "active":
-            return None, "Your account has been disabled. Please contact the library administrator."
-        if not self._verify_password(user["password"], password):
-            return None, "Incorrect password."
-        if user["password"].startswith(("pbkdf2:", "scrypt:")) is False:
-            self._upgrade_legacy_hash(user["user_id"], password)
-        self.log_activity(user["user_id"], user["name"], "LOGIN", "User logged in successfully")
-        return self._public_user(user), None
+            return None
+        return self._finish_authentication(user, password)
+
+    def authenticate_with_reason(self, credential, password):
+        user, reason = self._find_authenticated_user(str(credential).strip(), password)
+        if not user:
+            return None, reason
+        return self._finish_authentication(user, password), None
 
     def email_exists(self, email) -> bool:
         cursor = self.db.cursor()

@@ -77,6 +77,9 @@ def test_database_initialization_enables_foreign_keys(monkeypatch, tmp_path):
     database = DatabaseConnection()
     try:
         assert database.connection.execute("PRAGMA foreign_keys").fetchone()[0] == 1
+        assert database.connection.execute(
+            "SELECT value FROM settings WHERE key='library_name'"
+        ).fetchone()[0] == "Northstar Library"
         with pytest.raises(sqlite3.IntegrityError):
             database.connection.execute(
                 "INSERT INTO transactions (student_id, book_id, due_date) VALUES (?, ?, ?)",
@@ -119,6 +122,123 @@ def test_register_login_and_me(api):
     me = client.get("/api/auth/me").json()
     assert me["data"]["user"]["email"] == "alex@uni.edu"
     assert "password" not in me["data"]["user"]
+
+
+def test_development_accounts_login_by_case_insensitive_id_and_email(api):
+    client, controller, _ = api
+    from seed_northstar import DEVELOPMENT_ACCOUNTS, seed_development_accounts
+
+    seed_development_accounts(controller)
+    credentials = (
+        ("stu-1001", "Student@123", "student"),
+        ("STUDENT@SMARTLIBRARY.LOCAL", "Student@123", "student"),
+        ("lib-1001", "Librarian@123", "librarian"),
+        ("LIBRARIAN@SMARTLIBRARY.LOCAL", "Librarian@123", "librarian"),
+        ("adm-1001", "admin123", "admin"),
+        ("admin@library.com", "admin123", "admin"),
+        ("ADMIN@SMARTLIBRARY.LOCAL", "admin123", "admin"),
+    )
+
+    assert len(DEVELOPMENT_ACCOUNTS) == 3
+    for credential, password, role in credentials:
+        response = client.post(
+            "/api/auth/login",
+            json={"credential": credential, "password": password},
+        )
+        assert response.status_code == 200, response.json()
+        assert response.json()["data"]["user"]["role"] == role
+
+    registered = client.post("/api/auth/register", json={
+        "student_id": "2k24/swee/01",
+        "full_name": "Case Sensitive",
+        "email": "case-sensitive@library.com",
+        "password": "casepass123",
+        "confirm_password": "casepass123",
+    })
+    assert registered.status_code == 200, registered.json()
+    uppercase_id_login = client.post(
+        "/api/auth/login",
+        json={"credential": "2K24/SWEE/01", "password": "casepass123"},
+    )
+    assert uppercase_id_login.status_code == 200, uppercase_id_login.json()
+    assert uppercase_id_login.json()["data"]["user"]["user_id"] == "2k24/swee/01"
+
+
+@pytest.mark.parametrize(
+    ("credential", "original_password", "password_endpoint"),
+    [
+        ("2k24/swee/01", "Student@123", "/api/profile/password"),
+        ("LIB-1001", "Librarian@123", "/api/profile/password"),
+        ("ADM-1001", "admin123", "/api/admin/change-password"),
+    ],
+    ids=("student", "librarian", "admin"),
+)
+def test_development_account_seed_preserves_changed_password(
+    api, credential, original_password, password_endpoint,
+):
+    client, controller, _ = api
+    from seed_northstar import seed_development_accounts
+
+    seed_development_accounts(controller)
+    login_as(client, credential, original_password)
+    changed_password = "ChangedPass123"
+    changed = client.post(password_endpoint, json={
+        "current_password": original_password,
+        "new_password": changed_password,
+        "confirm_password": changed_password,
+    })
+    assert changed.status_code == 200, changed.json()
+    client.post("/api/auth/logout")
+
+    seed_development_accounts(controller)
+    assert client.post("/api/auth/login", json={
+        "credential": credential, "password": original_password,
+    }).status_code == 401
+    assert client.post("/api/auth/login", json={
+        "credential": credential, "password": changed_password,
+    }).status_code == 200
+    login_as(client, credential, changed_password)
+    restored = client.post(password_endpoint, json={
+        "current_password": changed_password,
+        "new_password": original_password,
+        "confirm_password": original_password,
+    })
+    assert restored.status_code == 200, restored.json()
+    client.post("/api/auth/logout")
+    login_as(client, credential, original_password)
+
+
+def test_student_login_alias_accepts_separator_variants_and_email_field(api):
+    client, controller, _ = api
+    controller.register(
+        "2k24/swee/01", "Existing Borrower", "borrower@library.com",
+        "Borrower@123", role="student",
+    )
+    from seed_northstar import seed_development_accounts
+
+    seed_development_accounts(controller)
+
+    hyphen_login = client.post(
+        "/api/auth/login",
+        json={"credential": "2K24-SWEE-01", "password": "Student@123"},
+    )
+    assert hyphen_login.status_code == 200, hyphen_login.json()
+    assert hyphen_login.json()["data"]["user"]["role"] == "student"
+    assert hyphen_login.json()["data"]["user"]["user_id"] == "STU-1001"
+
+    email_field_login = client.post(
+        "/api/auth/login",
+        json={"email": "2K24/SWEE/01", "password": "Student@123"},
+    )
+    assert email_field_login.status_code == 200, email_field_login.json()
+    assert email_field_login.json()["data"]["user"]["user_id"] == "STU-1001"
+
+    borrower_login = client.post(
+        "/api/auth/login",
+        json={"credential": "2k24/swee/01", "password": "Borrower@123"},
+    )
+    assert borrower_login.status_code == 200, borrower_login.json()
+    assert borrower_login.json()["data"]["user"]["user_id"] == "2k24/swee/01"
 
 
 def test_register_validation(api):
@@ -1087,7 +1207,7 @@ def test_profile_update_change_password_and_preferences(api):
 
     assert client.put("/api/profile/password", json={
         "current_password": "wrongpass", "new_password": "passw0rd2",
-        "confirm_password": "passw0rd2"}).status_code == 403
+        "confirm_password": "passw0rd2"}).status_code == 400
     assert client.put("/api/profile/password", json={
         "current_password": "passw0rd1", "new_password": "passw0rd2",
         "confirm_password": "passw0rd2"}).status_code == 200
@@ -1190,7 +1310,7 @@ def test_librarian_profile_page_and_account_endpoints(api):
         "current_password": "wrongpass", "new_password": "newpass123",
         "confirm_password": "newpass123",
     })
-    assert wrong_password.status_code == 403
+    assert wrong_password.status_code == 400
     changed = client.post("/api/profile/password", json={
         "current_password": "passw0rd1", "new_password": "newpass123",
         "confirm_password": "newpass123",
@@ -1246,7 +1366,7 @@ def test_librarian_profile_and_password_endpoints(api):
         "current_password": "wrongpass", "new_password": "newpass2",
         "confirm_password": "newpass2",
     })
-    assert wrong_password.status_code == 403
+    assert wrong_password.status_code == 400
     short_password = client.post("/api/librarian/change-password", json={
         "current_password": "passw0rd1", "new_password": "short",
         "confirm_password": "short",
@@ -1424,7 +1544,7 @@ def test_admin_creates_staff_and_manages_own_profile_security(api):
     assert client.post("/api/admin/change-password", json={
         "current_password": "wrongpass", "new_password": "newpass99",
         "confirm_password": "newpass99",
-    }).status_code == 403
+    }).status_code == 400
     changed = client.post("/api/admin/change-password", json={
         "current_password": "admin123", "new_password": "newpass99",
         "confirm_password": "newpass99",

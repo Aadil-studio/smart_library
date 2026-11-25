@@ -47,6 +47,14 @@ class DatabaseConnection:
         );
         """)
 
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS user_login_aliases (
+            alias TEXT PRIMARY KEY COLLATE NOCASE,
+            user_id TEXT NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+        );
+        """)
+
         # Categories Table
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS categories (
@@ -240,7 +248,7 @@ class DatabaseConnection:
         );
         """)
         for key, value in (
-            ("library_name", "Smart Library"),
+            ("library_name", "Northstar Library"),
             ("loan_period_days", "14"),
             ("fine_per_day", "10"),
             ("due_soon_days", "3"),

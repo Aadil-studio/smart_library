@@ -46,9 +46,23 @@
           <div class="breadcrumbs"><span>Workspace</span><span class="crumb-sep">/</span><strong>Profile</strong></div>
         </div>
         <div class="header-tools">
+          <div class="global-search">
+            <span class="search-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg></span>
+            <input id="global-search" type="search" placeholder="Search books, members, loans…" autocomplete="off" aria-label="Search books, members, and loans">
+            <kbd>⌘ K</kbd>
+            <div class="search-results" id="search-results" hidden></div>
+          </div>
           <div class="header-date" id="header-date"></div>
+          <div class="header-divider"></div>
+          <div class="notification-wrap">
+            <button class="icon-button notification-button" data-action="toggle-notifications" type="button" aria-label="Notifications">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></svg>
+              <span class="notification-count" id="notification-count" hidden>0</span>
+            </button>
+            <div class="notification-popover" id="notification-popover" hidden></div>
+          </div>
           <span class="connection-chip"><i></i><span>Online</span></span>
-          <a class="profile-trigger" href="profile.html" aria-label="My profile">
+          <a class="profile-trigger" href="profile.html" aria-label="Library Desk profile">
             <span class="avatar" id="header-avatar">L</span>
             <span class="profile-trigger-copy"><strong id="header-name">Library Desk</strong><small>Librarian</small></span>
           </a>
@@ -78,16 +92,15 @@
             <div class="librarian-identity-details">
               <div><small>Email</small><strong id="profile-email">—</strong></div>
               <div><small>Staff ID</small><strong id="profile-staff-id">—</strong></div>
-              <div><small>Department</small><strong id="profile-department">Library Services</strong></div>
-              <div><small>Semester</small><strong id="profile-semester">Not applicable</strong></div>
+              <div><small>Department</small><strong id="profile-department">Circulation &amp; Cataloging</strong></div>
+              <div><small>Access Level</small><strong>Senior Librarian</strong></div>
             </div>
             <div class="librarian-status-pills">
-              <span class="librarian-status-pill"><i></i>Account: Active</span>
-              <span class="librarian-status-pill">Role: Desk &amp; Circulation</span>
+              <span class="librarian-status-pill"><i></i>Desk Clearance: Active</span>
             </div>
             <div class="librarian-quick-stats">
-              <div><strong id="books-borrowed">0</strong><small>Books Borrowed</small></div>
-              <div><strong>3 Books</strong><small>Borrowing Limit</small></div>
+              <div><strong>30 Titles</strong><small>Managed in Catalog</small></div>
+              <div><strong>Active</strong><small>Desk Clearance</small></div>
             </div>
           </article>
 

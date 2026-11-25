@@ -23,6 +23,11 @@ body.admin-dashboard {
   font-size: 14px;
   min-width: 0;
 }
+html.librarian-scrollbars,html.librarian-scrollbars * { scrollbar-color: rgba(139,92,246,.35) transparent; scrollbar-width: thin; }
+html.librarian-scrollbars::-webkit-scrollbar,html.librarian-scrollbars *::-webkit-scrollbar { height: 6px; width: 6px; }
+html.librarian-scrollbars::-webkit-scrollbar-track,html.librarian-scrollbars *::-webkit-scrollbar-track { background: transparent; }
+html.librarian-scrollbars::-webkit-scrollbar-thumb,html.librarian-scrollbars *::-webkit-scrollbar-thumb { background: rgba(139,92,246,.35); border: 1px solid transparent; border-radius: 999px; background-clip: padding-box; }
+html.librarian-scrollbars::-webkit-scrollbar-thumb:hover,html.librarian-scrollbars *::-webkit-scrollbar-thumb:hover { background: rgba(139,92,246,.55); background-clip: padding-box; }
 body.admin-dashboard.role-librarian {
   --dash-blue: #77a7ff;
   --dash-violet: #b39aff;
@@ -297,6 +302,9 @@ body.admin-dashboard.role-librarian {
 .loans-table th:last-child,.loans-table td:last-child { padding-right: 15px; text-align: right; width: 10%; }
 .book-cell { align-items: center; display: flex; gap: 9px; min-width: 0; }
 .book-thumb { align-items: center; border: 1px solid #ffffff24; border-radius: 4px 7px 7px 4px; box-shadow: inset 3px 0 #0003; color: #fff; display: inline-flex; flex: 0 0 29px; font-size: 8px; font-weight: 700; height: 38px; justify-content: center; overflow: hidden; width: 29px; }
+.loan-cover-thumb { flex-basis: 32px; height: 44px; width: 32px; }
+.loan-cover-image { display: block; height: 100%; object-fit: cover; width: 100%; }
+.loan-cover-fallback { align-items: center; color: #fff; display: flex; height: 100%; justify-content: center; width: 100%; }
 .book-copy { display: grid; gap: 3px; min-width: 0; }
 .book-copy strong { color: #dce5f3; font-size: 10px; overflow: hidden; text-overflow: ellipsis; }
 .book-copy small { color: #7b8aa1; font-size: 8px; overflow: hidden; text-overflow: ellipsis; }
@@ -603,25 +611,18 @@ body.admin-dashboard.role-librarian {
   width: 38px;
 }
 .avatar-photo { border-radius: 50%; display: block; height: 100%; object-fit: cover; object-position: center top; width: 100%; }
-.welcome-title-row { align-items: center; display: flex; gap: 16px; }
+.welcome-title-row { align-items: center; display: flex; }
 .welcome-title-row h2 { margin: 0; }
-.welcome-avatar {
-  align-items: center;
-  aspect-ratio: 1 / 1;
-  background: linear-gradient(145deg,#718de2,#895cc0);
-  border: 2px solid #cdd8ff38;
-  border-radius: 50%;
-  box-shadow: 0 8px 22px #080c1c66;
-  color: #fff;
-  display: inline-flex;
-  flex: 0 0 52px;
-  font-size: 19px;
-  font-weight: 750;
-  height: 52px;
-  justify-content: center;
-  overflow: hidden;
-  width: 52px;
-}
+.librarian-desk-status { align-items: center; display: flex; flex-wrap: wrap; gap: 7px; margin-top: 12px; }
+.desk-status-pill { align-items: center; backdrop-filter: blur(8px); background: #ffffff0b; border: 1px solid #ffffff19; border-radius: 999px; color: #c1cce0; display: inline-flex; font-size: 9px; gap: 4px; padding: 6px 9px; white-space: nowrap; }
+.desk-status-pill strong { color: #f0f3ff; font-size: 10px; font-weight: 700; }
+.due-watchlist { align-items: center; background: linear-gradient(110deg,#161f34d9,#201d3ad9); border: 1px solid #a78bfa29; border-radius: 12px; display: flex; gap: 12px; justify-content: space-between; margin: 0 0 12px; padding: 11px 14px; }
+.due-watchlist-copy { align-items: center; color: #c4cde0; display: flex; font-size: 10px; gap: 9px; line-height: 1.5; min-width: 0; }
+.due-watchlist-indicator { background: #77d9ad; border-radius: 50%; box-shadow: 0 0 9px #54d6a077; flex: 0 0 7px; height: 7px; }
+.due-watchlist.has-due-soon .due-watchlist-indicator { background: #f0c46d; box-shadow: 0 0 9px #f0c46d77; }
+.due-watchlist.has-overdue .due-watchlist-indicator { background: #ff7b88; box-shadow: 0 0 9px #ff7b8877; }
+.due-watchlist-action { background: #ffffff09; border: 1px solid #ffffff1a; border-radius: 8px; color: #cfc5ff; cursor: pointer; flex: 0 0 auto; font-size: 9px; font-weight: 650; padding: 7px 10px; }
+.due-watchlist-action:hover { background: #ffffff14; border-color: #b39aff66; }
 .librarian-profile-content { padding-bottom: 48px; }
 .librarian-profile-grid { align-items: start; display: grid; gap: 16px; grid-template-columns: minmax(250px,.78fr) minmax(0,1.22fr); }
 .librarian-identity-card { align-items: center; display: flex; flex-direction: column; min-width: 0; padding: 26px 22px 22px; text-align: center; }
@@ -671,8 +672,7 @@ body.admin-dashboard.role-librarian {
   .librarian-profile-grid { grid-template-columns: 1fr; }
   .librarian-identity-card { max-width: none; }
   .librarian-profile-forms .settings-card { padding: 16px; }
-  .welcome-title-row { gap: 10px; }
-  .welcome-avatar { flex-basis: 42px; height: 42px; width: 42px; }
+  .due-watchlist { align-items: flex-start; }
 }
 @media (max-width:480px) {
   .librarian-password-form { grid-template-columns: 1fr; }

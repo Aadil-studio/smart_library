@@ -29,6 +29,7 @@ const decorationBooks = [
 ];
 let books = [];
 let loans = [];
+let reservations = [];
 let users = [];
 let studentFines = { fines: 0, fees: 0 };
 let fineRecords = [];
@@ -277,11 +278,19 @@ async function refreshLoans() {
     id: loan.id,
     bookId: loan.book_id,
     title: loan.book_title,
+    author: loan.book_author,
     studentId: loan.student_id,
     studentName: loan.student_name,
+    borrowedDate: loan.issue_date,
     dueDate: loan.due_date,
+    returnedDate: loan.return_date,
     status: loan.status,
   }));
+}
+
+async function refreshReservations() {
+  const result = await api("/reservations");
+  reservations = Array.isArray(result.data.reservations) ? result.data.reservations : [];
 }
 
 async function refreshWishlist() {
@@ -319,6 +328,7 @@ async function refreshData() {
     tasks.push(
       refreshWishlist(),
       refreshRenewalStatus(),
+      refreshReservations(),
       api("/borrow/fines").then((result) => {
         studentFines = {
           fines: Number(result.data.unpaid_total) || 0,
@@ -371,6 +381,41 @@ function bookAvailable(book) {
   return Number(book.availableCopies) || 0;
 }
 
+function daysUntilDue(loan) {
+  return Math.ceil((dateValue(loan.dueDate) - new Date(new Date().toDateString())) / 86400000);
+}
+
+function borrowingQuota() {
+  const limit = 3;
+  const borrowed = active(me.user_id).length;
+  const availableSlots = Math.max(0, limit - borrowed);
+  const progress = Math.min(100, (borrowed / limit) * 100);
+  return `<div class="borrowing-quota" aria-label="${borrowed} of ${limit} books borrowed, ${availableSlots} slots available"><div class="borrowing-quota-copy"><span>Borrowing quota</span><strong>${borrowed} of ${limit} books borrowed <i aria-hidden="true">·</i> ${availableSlots} ${availableSlots === 1 ? "slot" : "slots"} available</strong></div><div class="borrowing-quota-track" role="progressbar" aria-label="Books borrowed" aria-valuemin="0" aria-valuemax="${limit}" aria-valuenow="${Math.min(borrowed, limit)}"><span style="width:${progress}%"></span></div></div>`;
+}
+
+function updateStudentNotifications() {
+  const button = $("student-notification-button");
+  const popover = $("student-notification-popover");
+  const dot = $("student-notification-dot");
+  if (!button || !popover || !dot || !me || me.role !== "student") return;
+
+  const upcoming = active(me.user_id)
+    .map((loan) => ({ loan, days: daysUntilDue(loan) }))
+    .sort((left, right) => left.days - right.days);
+  const next = upcoming[0];
+  const urgent = upcoming.some(({ days }) => days <= 3);
+  const message = !next
+    ? "All loans on track — no books currently checked out."
+    : next.days < 0
+      ? `${next.loan.title} is overdue. Please return it as soon as possible.`
+      : next.days <= 3
+        ? `${next.loan.title} is due ${next.days === 0 ? "today" : `in ${next.days} day${next.days === 1 ? "" : "s"}`} (${formatDate(next.loan.dueDate)}).`
+        : `All loans on track — next due ${formatDate(next.loan.dueDate)}.`;
+  button.setAttribute("aria-label", urgent ? "A loan is due soon" : "Loan notifications");
+  dot.hidden = !urgent;
+  popover.innerHTML = `<span class="student-notification-kicker">LOAN REMINDERS</span><strong>${urgent ? "A loan needs your attention" : "You’re all caught up"}</strong><p>${esc(message)}</p>`;
+}
+
 function stats() {
   if (me && me.role === "student") {
     const mine = active(me.user_id);
@@ -409,9 +454,25 @@ function showBookDetails(bookId) {
   if (!book) return;
   const available = bookAvailable(book);
   const saved = savedBookIds.has(Number(book.id));
-  $("book-details-content").innerHTML = `<div class="book-details-content"><div class="book-details-cover">${cover(book)}</div><div class="book-details-copy"><span class="section-kicker">LIBRARY CATALOG</span><h2 id="book-details-title">${esc(book.title)}</h2><p class="details-author">by ${esc(book.author)}</p><div class="book-meta"><span class="tag">${esc(book.category)}</span><span class="${available ? "availability" : "availability unavailable"}">${available ? `${available} available` : "Currently unavailable"}</span></div><dl class="book-detail-list"><div><dt>ISBN</dt><dd>${esc(book.isbn || "Not recorded")}</dd></div><div><dt>Published</dt><dd>${esc(book.year || "Not recorded")}</dd></div><div><dt>Copies</dt><dd>${available} available of ${Number(book.totalCopies) || 0}</dd></div></dl><p class="book-details-description">${esc(book.description || "No description is available for this title.")}</p><div class="book-details-actions"><button class="btn" onclick="borrow(${Number(book.id)})" ${available < 1 ? "disabled" : ""}>${available ? "Borrow Book" : "Unavailable"}</button><button class="btn g" type="button" onclick="toggleWishlist(${Number(book.id)}, event)">${saved ? "Remove from Wishlist" : "Save to Wishlist"}</button></div></div></div>`;
+  $("book-details-content").innerHTML = `<div class="book-details-content"><div class="book-details-cover">${cover(book)}</div><div class="book-details-copy"><span class="section-kicker">LIBRARY CATALOG</span><h2 id="book-details-title">${esc(book.title)}</h2><p class="details-author">by ${esc(book.author)}</p><div class="book-meta"><span class="tag">${esc(book.category)}</span><span class="${available ? "availability" : "availability unavailable"}">${available ? `${available} available` : "Currently unavailable"}</span></div><dl class="book-detail-list"><div><dt>ISBN</dt><dd>${esc(book.isbn || "Not recorded")}</dd></div><div><dt>Published</dt><dd>${esc(book.year || "Not recorded")}</dd></div><div><dt>Copies</dt><dd>${available} available of ${Number(book.totalCopies) || 0}</dd></div></dl><p class="book-details-description">${esc(book.description || "No description is available for this title.")}</p><div class="book-details-actions"><button class="btn" type="button" onclick="${available ? `borrow(${Number(book.id)})` : `reserveBook(${Number(book.id)})`}">${available ? "Borrow Book" : "Reserve Book"}</button><button class="btn g" type="button" onclick="toggleWishlist(${Number(book.id)}, event)">${saved ? "Remove from Wishlist" : "Add to Wishlist"}</button></div></div></div>`;
   $("book-details-backdrop").hidden = false;
+  $("book-details-dialog").focus();
   window.NorthstarBookCovers.hydrate($("book-details-content"), [book]);
+}
+
+async function reserveBook(bookId) {
+  try {
+    const result = await api("/reservations", {
+      method: "POST",
+      body: JSON.stringify({ book_id: Number(bookId) }),
+    });
+    toast(result.message || "Reservation submitted.");
+    closeBookDetails();
+    await refreshData();
+    draw();
+  } catch (error) {
+    toast(error.message);
+  }
 }
 
 async function toggleWishlist(bookId, event) {
@@ -454,6 +515,58 @@ function loanRows(list, manager) {
       return `<tr><td><div class="student-loan-book">${cover(loanBook)}<span><strong title="${esc(loan.title)}">${esc(loan.title)}</strong><small>${esc(book ? book.author : "")}</small></span></div></td>${manager ? `<td>${esc(loan.studentName || loan.studentId)}</td>` : ""}<td class="${overdue ? "over" : ""}"><strong>${esc(formatDate(loan.dueDate))}</strong><small class="due-hint">${overdue ? `${Math.abs(days)} day(s) overdue` : days === 0 ? "Due today" : `${days} day(s) left`}</small></td><td><span class="loan-status ${overdue ? "is-overdue" : "is-active"}">${overdue ? "Overdue" : "On loan"}</span></td><td><div class="loan-actions">${renewalAction}<button class="btn sm g" onclick="giveBack(${Number(loan.id)})">Return</button></div></td></tr>`;
     })
     .join("")}</tbody></table></div>`;
+}
+
+function reservationRows() {
+  const activeReservations = reservations.filter((reservation) =>
+    ["pending", "approved"].includes(String(reservation.status).toLowerCase()),
+  );
+  if (!activeReservations.length) {
+    return '<div class="student-empty student-reservations-empty"><strong>No active reservations</strong><p>Reserve out-of-stock books from the catalog.</p><button class="btn sm g" onclick="go(\'browse\')">Browse books</button></div>';
+  }
+
+  return `<div class="student-reservations-list">${activeReservations.map((reservation) => {
+    const status = String(reservation.status).toLowerCase();
+    const book = books.find((item) => Number(item.id) === Number(reservation.book_id)) || {
+      id: reservation.book_id,
+      title: reservation.book_title,
+      author: reservation.book_author,
+    };
+    const cancelAction = status === "pending"
+      ? `<button class="btn sm g" type="button" onclick="cancelReservation(${Number(reservation.id)})">Cancel Reservation</button>`
+      : "";
+    return `<article class="student-reservation-row"><div class="student-reservation-book">${cover(book)}<span><strong title="${esc(reservation.book_title)}">${esc(reservation.book_title)}</strong><small>${esc(reservation.book_author || book.author || "")}</small></span></div><div class="student-reservation-meta"><span class="reservation-status is-${status}">${status === "approved" ? "Approved" : "Pending"}</span><small>Requested ${esc(historyDate(reservation.request_date))}</small></div><div class="student-reservation-action">${cancelAction}</div></article>`;
+  }).join("")}</div>`;
+}
+
+function returnedLoanRows() {
+  const returnedLoans = loans.filter((loan) => loan.status === "returned");
+  if (!returnedLoans.length) {
+    return '<div class="student-empty student-history-empty"><strong>No returned books yet</strong><p>Completed loans will appear here after you return a book.</p></div>';
+  }
+
+  return `<div class="student-table-wrap"><table class="student-history-table"><thead><tr><th>Book</th><th>Borrowed</th><th>Returned</th><th>Status</th></tr></thead><tbody>${returnedLoans.map((loan) => {
+    const book = books.find((item) => Number(item.id) === Number(loan.bookId)) || {
+      id: loan.bookId,
+      title: loan.title,
+      author: loan.author,
+    };
+    return `<tr><td><div class="student-history-book">${cover(book)}<span><strong title="${esc(loan.title)}">${esc(loan.title)}</strong><small>${esc(loan.author || book.author || "")}</small></span></div></td><td>${esc(historyDate(loan.borrowedDate))}</td><td>${esc(historyDate(loan.returnedDate))}</td><td><span class="loan-status is-returned">Returned</span></td></tr>`;
+  }).join("")}</tbody></table></div>`;
+}
+
+async function cancelReservation(reservationId) {
+  try {
+    await api(`/reservations/${Number(reservationId)}`, {
+      method: "PUT",
+      body: JSON.stringify({ action: "cancel" }),
+    });
+    await refreshReservations();
+    toast("Reservation cancelled.");
+    draw();
+  } catch (error) {
+    toast(error.message);
+  }
 }
 
 function categoryStats() {
@@ -540,8 +653,8 @@ function renderFines() {
         .join("")}</tbody></table></div>`
     : '<div class="fines-empty"><strong>No fines or book fees recorded</strong><span>You are all caught up.</span></div>';
   const receiptAction = latestFee
-    ? `<a class="btn fines-download" href="/api/fees/${Number(latestFee.id)}/receipt.pdf"><span aria-hidden="true">↓</span>Download Receipt / Statement (PDF)</a><small class="fines-receipt-note">Downloads the latest book-fee receipt.</small>`
-    : `<button class="btn fines-download" type="button" disabled>Download Receipt / Statement (PDF)</button><small class="fines-receipt-note">PDF receipts are available for book-fee records.</small>`;
+    ? `<small class="fines-receipt-note">Downloads the latest book-fee receipt.</small><a class="btn fines-download" href="/api/fees/${Number(latestFee.id)}/receipt.pdf"><span aria-hidden="true">↓</span>Download Receipt / Statement (PDF)</a>`
+    : `<small class="fines-receipt-note">PDF receipts are available for book-fee records.</small><button class="btn fines-download" type="button" disabled>Download Receipt / Statement (PDF)</button>`;
 
   return `<section class="panel fines-balance-card"><div class="fines-balance-copy"><span class="section-kicker">ACCOUNT SUMMARY</span><h3>Outstanding balance</h3><strong class="fines-balance-amount">Rs. ${(studentFines.fines + studentFines.fees).toFixed(2)}</strong><p>Unpaid fines and book fees</p></div><div class="fines-receipt-action">${receiptAction}</div></section><section class="panel fines-history-card"><div class="panel-title-row"><div><span class="section-kicker">ACCOUNT ACTIVITY</span><h3>Fine history</h3></div><span class="section-count">${entries.length} record${entries.length === 1 ? "" : "s"}</span></div>${history}</section>`;
 }
@@ -727,7 +840,7 @@ function bindStudentProfileForms() {
       button.textContent = "Updating...";
       try {
         const result = await api("/profile/password", {
-          method: "PUT",
+          method: "POST",
           body: JSON.stringify({
             current_password: passwordForm.elements.namedItem("current_password").value,
             new_password: newPassword,
@@ -748,7 +861,7 @@ function bindStudentProfileForms() {
 
 function toolbar() {
   const categories = ["All", ...new Set(books.map((book) => book.category))];
-  return `<div class="bar"><label class="catalog-search"><span aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 4.5 4.5"/></svg></span><input id="sq" placeholder="Search title, author or ISBN" value="${esc(q)}" oninput="searchBooks(this.value)"></label><div class="catalog-controls"><span class="catalog-result-count">${filteredBooks().length} titles</span><button class="filter-toggle ${availableOnly ? "is-active" : ""}" type="button" aria-pressed="${availableOnly}" onclick="setAvailableOnly(${!availableOnly})">Available only</button><label class="catalog-sort"><span>Sort by</span><select aria-label="Sort books" onchange="setBookSort(this.value)"><option value="newest" ${sortBy === "newest" ? "selected" : ""}>Newest</option><option value="title" ${sortBy === "title" ? "selected" : ""}>Title A–Z</option><option value="available" ${sortBy === "available" ? "selected" : ""}>Most Available</option></select></label></div></div><div class="chips" style="margin-bottom:20px">${categories
+  return `<div class="bar catalog-toolbar"><label class="catalog-search"><span aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 4.5 4.5"/></svg></span><input id="sq" placeholder="Search title, author or ISBN" value="${esc(q)}" oninput="searchBooks(this.value)"></label><div class="catalog-controls"><span class="catalog-result-count">${filteredBooks().length} titles</span><button class="filter-toggle ${availableOnly ? "is-active" : ""}" type="button" aria-pressed="${availableOnly}" onclick="setAvailableOnly(${!availableOnly})">Available only</button><label class="catalog-sort"><span>Sort by</span><select aria-label="Sort books" onchange="setBookSort(this.value)"><option value="newest" ${sortBy === "newest" ? "selected" : ""}>Newest</option><option value="title" ${sortBy === "title" ? "selected" : ""}>Title A–Z</option><option value="available" ${sortBy === "available" ? "selected" : ""}>Most Available</option></select></label></div></div><div class="chips" style="margin-bottom:20px">${categories
     .map(
       (category) =>
         `<button class="chip ${category === cat ? "on" : ""}" onclick="setCat('${esc(category).replace(/'/g, "\\'")}')">${esc(category)}</button>`,
@@ -782,14 +895,18 @@ function draw() {
     const recentLoans = active(me.role === "student" ? me.user_id : undefined);
     const recentlyAdded = [...books].sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
     const featuredBook = recentlyAdded[0];
-    html = `<section class="welcome"><div class="welcome-copy"><span class="welcome-eyebrow">YOUR PERSONAL LIBRARY</span><h3>Welcome back, ${esc(me.name.split(" ")[0])}</h3><p>${me.role === "student" ? `You have ${recentLoans.length} book(s) on loan. Ready to discover your next read?` : "Here is how the library looks today."}</p><button class="btn" onclick="go('${me.role === "student" ? "browse" : "books"}')">${me.role === "student" ? "Explore the catalog" : "Manage books"}<span aria-hidden="true">→</span></button></div>${featuredBook ? `<div class="fcov">${cover(featuredBook)}</div>` : ""}<span class="welcome-orbit welcome-orbit-one"></span><span class="welcome-orbit welcome-orbit-two"></span></section>${stats()}<div class="cols"><section class="panel"><div class="panel-title-row"><div><span class="section-kicker">KEEP ON TRACK</span><h3>${me.role === "student" ? "Your active loans" : "Recent loans"}</h3></div><button class="section-link" onclick="go('loans')">View all loans <span aria-hidden="true">→</span></button></div>${loanRows(recentLoans.slice(0, 6), staff())}</section><section class="panel category-panel"><div class="panel-title-row"><div><span class="section-kicker">EXPLORE THE COLLECTION</span><h3>Books by category</h3></div><span class="section-count">${new Set(books.map((book) => book.category)).size} categories</span></div>${categoryStats()}</section></div>`;
+    html = `<section class="welcome"><div class="welcome-copy"><span class="welcome-eyebrow">YOUR PERSONAL LIBRARY</span><h3>Welcome back, ${esc(formatStudentName(me.name).split(" ")[0])}</h3><p>${me.role === "student" ? `You have ${recentLoans.length} book(s) on loan. Ready to discover your next read?` : "Here is how the library looks today."}</p><button class="btn" onclick="go('${me.role === "student" ? "browse" : "books"}')">${me.role === "student" ? "Explore the catalog" : "Manage books"}<span aria-hidden="true">→</span></button>${me.role === "student" ? borrowingQuota() : ""}</div>${featuredBook ? `<div class="fcov">${cover(featuredBook)}</div>` : ""}<span class="welcome-orbit welcome-orbit-one"></span><span class="welcome-orbit welcome-orbit-two"></span></section>${stats()}<div class="cols"><section class="panel"><div class="panel-title-row"><div><span class="section-kicker">KEEP ON TRACK</span><h3>${me.role === "student" ? "Your active loans" : "Recent loans"}</h3></div><button class="section-link" onclick="go('loans')">View all loans <span aria-hidden="true">→</span></button></div>${loanRows(recentLoans.slice(0, 6), staff())}</section><section class="panel category-panel"><div class="panel-title-row"><div><span class="section-kicker">EXPLORE THE COLLECTION</span><h3>Books by category</h3></div><span class="section-count">${new Set(books.map((book) => book.category)).size} categories</span></div>${categoryStats()}</section></div>`;
     if (me.role === "student") {
       html += `<section class="panel catalog-panel"><div class="panel-title-row"><div><span class="section-kicker">FRESH FROM THE CATALOG</span><h3>Recently added books</h3></div><button class="section-link" onclick="go('browse')">Browse catalog <span aria-hidden="true">→</span></button></div><div class="grid">${recentlyAdded.slice(0, 6).map(renderBookCard).join("")}</div></section>`;
     }
   } else if (view === "browse") {
     html = `${toolbar()}<div class="grid" id="g">${bookGrid()}</div>`;
   } else if (view === "loans") {
-    html = `<div class="panel">${loanRows(active(me.role === "student" ? me.user_id : undefined), staff())}</div>`;
+    if (me.role === "student") {
+      html = `<section class="panel"><div class="panel-title-row"><div><span class="section-kicker">CURRENTLY BORROWED</span><h3>Active Loans</h3></div></div>${loanRows(active(me.user_id), false)}</section><section class="panel student-secondary-loans"><div class="panel-title-row"><div><span class="section-kicker">UP NEXT</span><h3>Active Reservations</h3></div><span class="section-count">${reservations.filter((reservation) => ["pending", "approved"].includes(String(reservation.status).toLowerCase())).length} active</span></div>${reservationRows()}</section><section class="panel student-secondary-loans"><div class="panel-title-row"><div><span class="section-kicker">YOUR READING JOURNEY</span><h3>Loan History &amp; Returned Books</h3></div><span class="section-count">${loans.filter((loan) => loan.status === "returned").length} returned</span></div>${returnedLoanRows()}</section>`;
+    } else {
+      html = `<div class="panel">${loanRows(active(), staff())}</div>`;
+    }
   } else if (view === "fines" && me.role === "student") {
     html = renderFines();
   } else if (view === "profile" && me.role === "student") {
@@ -817,6 +934,7 @@ function draw() {
     bindStudentProfileForms();
   }
   if ($("student-global-search")) $("student-global-search").value = view === "browse" ? q : "";
+  updateStudentNotifications();
   const form = $("fb");
   if (form) {
     form.onsubmit = async (event) => {
@@ -923,11 +1041,17 @@ async function del(bookId) {
   }
 }
 
-function demo(credential) {
-  if ($("li")) {
-    $("li").value = credential;
-    $("lp").focus();
-  }
+function demo(credential, password) {
+  const credentialInput = $("li");
+  const passwordInput = $("lp");
+  if (!credentialInput || !passwordInput) return;
+
+  credentialInput.value = credential;
+  passwordInput.value = password;
+  [credentialInput, passwordInput].forEach((input) => {
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
 }
 
 function attachPasswordToggles() {
@@ -1356,6 +1480,8 @@ window.logout = logout;
 window.toggleStudentNav = toggleStudentNav;
 window.showBookDetails = showBookDetails;
 window.closeBookDetails = closeBookDetails;
+window.reserveBook = reserveBook;
+window.cancelReservation = cancelReservation;
 renderDecoration();
 attachAuthForms();
 
@@ -1363,7 +1489,8 @@ function hideStudentSearchResults() {
   const results = $("student-search-results");
   if (results) {
     results.hidden = true;
-    $("student-global-search").setAttribute("aria-expanded", "false");
+    const input = $("student-global-search");
+    if (input) input.setAttribute("aria-expanded", "false");
   }
 }
 
@@ -1383,49 +1510,54 @@ function renderStudentSearchResults(value) {
   results.innerHTML = matches.length
     ? matches.map((book) => {
       const available = bookAvailable(book);
-      return `<button class="student-search-result" type="button" role="option" data-book-details="${Number(book.id)}">${cover(book)}<span class="student-search-result-copy"><strong>${esc(book.title)}</strong><small>By ${esc(book.author)}</small><span class="${available ? "availability" : "availability unavailable"}">${available ? `${available} available` : "Unavailable"}</span></span></button>`;
+      return `<button class="student-search-result" type="button" role="option" data-book-details="${Number(book.id)}"><span class="student-search-result-cover">${cover(book)}</span><span class="student-search-result-copy"><strong>${esc(book.title)}</strong><small>By ${esc(book.author)}</small><span class="student-search-category">${esc(book.category)}</span><span class="student-search-availability ${available ? "is-available" : "is-unavailable"}">${available ? `${available} available` : "Unavailable"}</span></span></button>`;
     }).join("")
     : '<div class="student-search-empty">No matching titles in the catalog.</div>';
   results.hidden = false;
+  const searchWrap = input.closest(".student-search-wrap");
+  const maxWidth = Math.min(380, window.innerWidth - 24);
+  const maxLeft = window.innerWidth - 12 - maxWidth;
+  results.style.left = `${Math.min(0, maxLeft - searchWrap.getBoundingClientRect().left)}px`;
   input.setAttribute("aria-expanded", "true");
   if (matches.length) window.NorthstarBookCovers.hydrate(results, matches);
 }
 
 const globalSearch = $("student-global-search");
 if (globalSearch) {
-  const searchTools = globalSearch.closest(".student-header-tools");
-  const results = document.createElement("div");
-  results.id = "student-search-results";
-  results.className = "student-search-results";
-  results.hidden = true;
-  results.setAttribute("role", "listbox");
-  searchTools.appendChild(results);
-  globalSearch.setAttribute("aria-autocomplete", "list");
-  globalSearch.setAttribute("aria-controls", results.id);
-  globalSearch.setAttribute("aria-expanded", "false");
+  const searchWrap = globalSearch.closest(".student-search-wrap");
   globalSearch.addEventListener("input", (event) => {
-    q = event.target.value;
-    if (view !== "browse") view = "browse";
-    draw();
-    const input = $("student-global-search");
-    input.focus();
-    input.setSelectionRange(q.length, q.length);
-    renderStudentSearchResults(q);
+    renderStudentSearchResults(event.target.value);
   });
   globalSearch.addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
+      q = globalSearch.value;
       hideStudentSearchResults();
       go("browse");
     }
     if (event.key === "Escape") {
-      q = "";
+      event.preventDefault();
       globalSearch.value = "";
       hideStudentSearchResults();
-      draw();
     }
   });
   document.addEventListener("click", (event) => {
-    if (!searchTools.contains(event.target)) hideStudentSearchResults();
+    if (!searchWrap.contains(event.target)) hideStudentSearchResults();
+  });
+}
+
+const notificationButton = $("student-notification-button");
+if (notificationButton) {
+  const notificationWrap = notificationButton.closest(".student-notification-wrap");
+  notificationButton.addEventListener("click", () => {
+    const popover = $("student-notification-popover");
+    popover.hidden = !popover.hidden;
+    notificationButton.setAttribute("aria-expanded", String(!popover.hidden));
+  });
+  document.addEventListener("click", (event) => {
+    if (!notificationWrap.contains(event.target)) {
+      $("student-notification-popover").hidden = true;
+      notificationButton.setAttribute("aria-expanded", "false");
+    }
   });
 }
 
@@ -1439,6 +1571,13 @@ document.addEventListener("click", (event) => {
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && $("book-details-backdrop") && !$("book-details-backdrop").hidden) {
     closeBookDetails();
+  }
+  if (event.key === "Escape" && $("student-notification-popover")) {
+    $("student-notification-popover").hidden = true;
+    if (notificationButton) notificationButton.setAttribute("aria-expanded", "false");
+  }
+  if (event.key === "Escape" && $("student-search-results") && !$("student-search-results").hidden) {
+    hideStudentSearchResults();
   }
 });
 

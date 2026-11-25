@@ -238,7 +238,7 @@ async def change_admin_password(request: Request, user: dict = Depends(admin_req
         user["user_id"], data["current_password"], data["new_password"]
     )
     if not success:
-        return fail(message, 403)
+        return fail(message, 400)
     return ok(message=message)
 
 
@@ -311,7 +311,7 @@ async def change_librarian_password(request: Request, user: dict = Depends(libra
         user["user_id"], data["current_password"], data["new_password"]
     )
     if not success:
-        return fail(message, 403)
+        return fail(message, 400)
     return ok(message=message)
 
 
@@ -424,7 +424,7 @@ async def change_password(request: Request, user: dict = Depends(login_required)
         return fail(problem)
     success, message = controller.change_password(user["user_id"], data["current_password"], data["new_password"])
     if not success:
-        return fail(message, 403)
+        return fail(message, 400)
     return ok(message=message)
 
 

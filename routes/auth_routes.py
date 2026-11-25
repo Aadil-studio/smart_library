@@ -114,11 +114,15 @@ async def register(request: Request):
 async def login(request: Request):
     controller = get_controller(request)
     data = await json_body(request)
-    error = require_fields(data, "credential", "password")
+    credential = data.get("credential")
+    if credential is None or (isinstance(credential, str) and not credential.strip()):
+        credential = data.get("email")
+    error = require_fields({"credential": credential, "password": data.get("password")},
+                           "credential", "password")
     if error:
         return fail("Please enter your login credentials.")
 
-    credential = str(data["credential"]).strip()
+    credential = str(credential).strip()
     user, _reason = controller.user_dao.authenticate_with_reason(credential, data["password"])
     if not user:
         return fail("Invalid email or password.", 401)

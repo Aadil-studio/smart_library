@@ -147,7 +147,7 @@ def seed_default_admin(controller: LibraryController):
     if not debug_enabled() and (not admin_email or not admin_password):
         raise RuntimeError("Set ADMIN_EMAIL and ADMIN_PASSWORD before starting without debug mode.")
     admin_email = admin_email or "admin@library.com"
-    admin_password = admin_password or "admin123"
+    admin_password = admin_password or "Admin@123"
     controller.register(
         "ADMIN001", "System Administrator", admin_email, admin_password,
         role="admin", department="IT",

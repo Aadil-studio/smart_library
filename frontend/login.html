@@ -8,8 +8,8 @@
   <div class="shelf" id="shelf"></div><div class="float" id="float"></div></section>
 <section class="formside"><div class="card">
 {% for category, message in flash_messages %}<p class="flash-message flash-{{ category }}">{{ message }}</p>{% endfor %}
-<h2>Welcome back</h2><p class="sub">Sign in to borrow books and track your loans.</p><form id="fin"><label>ID or email</label><input id="li" placeholder="STU-2048" required><label>Password</label><input id="lp" type="password" required>
+<h2>Welcome back</h2><p class="sub">Sign in to borrow books and track your loans.</p><form id="fin"><label>ID or email</label><input id="li" placeholder="STU-2048" autocomplete="username" required><label>Password</label><input id="lp" type="password" autocomplete="current-password" required>
    <button class="btn" style="width:100%;margin-top:18px">Sign in</button>
-   <div class="demo">Use a development account:<div class="chips" style="margin-top:10px"><button type="button" class="chip" onclick="demo('STU-1001')">🎓 Student</button><button type="button" class="chip" onclick="demo('LIB-2001')">📖 Librarian</button><button type="button" class="chip" onclick="demo('ADMIN001')">🛡️ Admin</button></div></div></form><p class="alt"><a class="lnk" href="forgot-password.html">Forgot password?</a> &nbsp;|&nbsp; <a class="lnk" href="signup.html">Create an account</a></p>
+   <div class="demo">Use a development account:<div class="chips" style="margin-top:10px"><button type="button" class="chip" onclick="demo('2k24/swee/01', 'Student@123')">🎓 Student</button><button type="button" class="chip" onclick="demo('LIB-1001', 'Librarian@123')">📖 Librarian</button><button type="button" class="chip" onclick="demo('ADM-1001', 'Admin@123')">🛡️ Admin</button></div></div></form><p class="alt"><a class="lnk" href="forgot-password.html">Forgot password?</a> &nbsp;|&nbsp; <a class="lnk" href="signup.html">Create an account</a></p>
 </div></section></div>
 <script src="js/northstar.js"></script></body></html>

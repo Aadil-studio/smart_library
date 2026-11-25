@@ -31,11 +31,21 @@
             <h2 id="ptitle">My profile</h2>
           </div>
           <div class="top-meta student-header-tools">
-            <label class="student-search" aria-label="Search books">
-              <span aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 4.5 4.5"/></svg></span>
-              <input id="student-global-search" type="search" placeholder="Search books..." autocomplete="off">
-            </label>
+            <div class="student-search-wrap">
+              <label class="student-search" aria-label="Search books">
+                <span aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 4.5 4.5"/></svg></span>
+                <input id="student-global-search" type="search" placeholder="Search books..." autocomplete="off" role="combobox" aria-autocomplete="list" aria-controls="student-search-results" aria-expanded="false">
+              </label>
+              <div id="student-search-results" class="student-search-results" role="listbox" aria-label="Book search results" hidden></div>
+            </div>
             <span class="backend-badge student-system-status" role="status" aria-label="Northstar student portal"><i aria-hidden="true"></i><span>Student portal</span></span>
+            <div class="student-notification-wrap">
+              <button class="student-notification-button" id="student-notification-button" type="button" aria-label="Loan notifications" aria-expanded="false" aria-controls="student-notification-popover">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg>
+                <span class="student-notification-dot" id="student-notification-dot" hidden></span>
+              </button>
+              <div class="student-notification-popover" id="student-notification-popover" role="status" aria-live="polite" hidden></div>
+            </div>
             <span class="student-date" id="student-date"></span>
             <a class="who student-profile-trigger" id="student-profile-trigger" href="profile.html" aria-label="View my profile">
               <span class="av" id="uav"></span>
@@ -48,7 +58,7 @@
       </main>
     </div>
     <div class="book-details-backdrop" id="book-details-backdrop" hidden onclick="closeBookDetails(event)">
-      <section class="book-details-dialog" role="dialog" aria-modal="true" aria-labelledby="book-details-title">
+      <section class="book-details-dialog" id="book-details-dialog" role="dialog" aria-modal="true" aria-labelledby="book-details-title" tabindex="-1">
         <button class="book-details-close" aria-label="Close book details" onclick="closeBookDetails(event)">×</button>
         <div id="book-details-content"></div>
       </section>

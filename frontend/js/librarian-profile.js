@@ -5,6 +5,9 @@ const API = "/api";
 const BASE = document.body.dataset.base || "../";
 let profile = null;
 let toastTimer = null;
+let searchTimer = null;
+let notifications = [];
+document.documentElement.classList.add("librarian-scrollbars");
 
 async function api(path, options = {}) {
   let response;
@@ -64,18 +67,106 @@ function setProfile(profileData) {
   $("profile-name").textContent = name;
   $("profile-email").textContent = profile.email || "—";
   $("profile-staff-id").textContent = profile.user_id || "—";
-  $("profile-department").textContent = profile.department || "Library Services";
-  $("profile-semester").textContent = profile.semester || "Not applicable";
+  $("profile-department").textContent = "Circulation & Cataloging";
   $("full-name").value = name;
   $("phone-number").value = profile.phone || "";
   $("email-address").value = profile.email || "";
   $("side-name").textContent = name;
   $("header-name").textContent = name;
-  $("books-borrowed").textContent = String(profile.borrowed_total ?? profile.active_loans ?? 0);
   setAvatar($("profile-avatar"), profile.avatar_url, fallback);
   setAvatar($("side-avatar"), profile.avatar_url, fallback);
   setAvatar($("header-avatar"), profile.avatar_url, fallback);
   $("remove-avatar").hidden = !profile.avatar_url;
+}
+
+function renderNotifications() {
+  const count = $("notification-count");
+  count.textContent = notifications.length > 99 ? "99+" : String(notifications.length);
+  count.hidden = !notifications.length;
+  const popover = $("notification-popover");
+  const items = notifications.slice(0, 6);
+  popover.innerHTML = `<div class="notification-popover-head"><strong>Notifications${items.length ? ` (${items.length} unread)` : ""}</strong>${items.length ? '<button class="notification-mark-all" data-action="mark-all-read" type="button">Mark all read</button>' : ""}</div>${items.length ? items.map((item) => `<div class="notification-item"><span class="activity-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></svg></span><div><p>${escapeHtml(item.title || "Library update")}: ${escapeHtml(item.message || "")}</p><small>${escapeHtml(formatDateTime(item.created_at))} · <button class="notification-mark-all" data-action="mark-read" data-notification-id="${Number(item.id)}" type="button">Mark read</button></small></div></div>`).join("") : '<div class="notification-empty">You’re all caught up.</div>'}`;
+}
+
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  })[character]);
+}
+
+function formatDateTime(value) {
+  if (!value) return "Date not recorded";
+  const date = new Date(String(value).replace(" ", "T"));
+  return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+}
+
+async function loadNotifications() {
+  const result = await api("/notifications?unread=1");
+  notifications = result.data.notifications || [];
+  renderNotifications();
+}
+
+async function markNotificationRead(notificationId) {
+  try {
+    await api(`/notifications/${Number(notificationId)}/read`, { method: "PUT" });
+    await loadNotifications();
+  } catch (error) {
+    showToast(error.message, true);
+  }
+}
+
+async function markAllNotificationsRead() {
+  try {
+    await api("/notifications/read-all", { method: "PUT" });
+    await loadNotifications();
+    showToast("All notifications marked as read.");
+  } catch (error) {
+    showToast(error.message, true);
+  }
+}
+
+async function searchRecords(term) {
+  const results = $("search-results");
+  if (!term) {
+    results.hidden = true;
+    return;
+  }
+  results.hidden = false;
+  results.innerHTML = '<div class="search-empty">Searching live library records…</div>';
+  const params = new URLSearchParams({ q: term });
+  try {
+    const [books, loans, members] = await Promise.all([
+      api(`/books?${params}`),
+      api(`/borrow?scope=all&${params}`),
+      api(`/students?${params}`),
+    ]);
+    if ($("global-search").value.trim().toLowerCase() !== term.toLowerCase()) return;
+    const records = [
+      ...(books.data.books || []).slice(0, 4).map((item) => ({ kind: "Books", title: item.title, subtitle: `${item.author || "Author not recorded"} · ${item.isbn || "No ISBN"}` })),
+      ...(members.data.students || []).slice(0, 4).map((item) => ({ kind: "Members", title: item.name || item.user_id, subtitle: `${item.user_id || ""} · ${item.email || item.status || ""}` })),
+      ...(loans.data.transactions || []).slice(0, 4).map((item) => ({ kind: "Loans", title: item.book_title || "Untitled book", subtitle: `${item.student_name || item.student_id} · ${item.status}` })),
+    ];
+    results.innerHTML = records.length
+      ? records.map((item) => `<div class="search-group-label">${item.kind}</div><button class="search-result" type="button" data-profile-search-result><span class="search-result-copy"><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.subtitle)}</small></span></button>`).join("")
+      : '<div class="search-empty">No matching records found.</div>';
+  } catch (error) {
+    results.innerHTML = `<div class="search-empty">${escapeHtml(error.message)}</div>`;
+  }
+}
+
+function handleHeaderAction(event) {
+  const action = event.target.closest("[data-action]")?.dataset.action;
+  if (action === "toggle-notifications") {
+    $("notification-popover").hidden = !$("notification-popover").hidden;
+    $("search-results").hidden = true;
+  } else if (action === "mark-read") {
+    markNotificationRead(event.target.closest("[data-notification-id]").dataset.notificationId);
+  } else if (action === "mark-all-read") {
+    markAllNotificationsRead();
+  } else if (event.target.closest("[data-profile-search-result]")) {
+    const term = $("global-search").value.trim();
+    location.href = `${BASE}admin/dashboard.html?search=${encodeURIComponent(term)}`;
+  }
 }
 
 function setPending(form, pending) {
@@ -94,6 +185,7 @@ async function loadProfile() {
   }
   const result = await api("/profile");
   setProfile({ ...result.data.profile, ...(result.data.stats || {}) });
+  loadNotifications().catch((error) => showToast(error.message, true));
   const date = $("header-date");
   if (date) {
     date.textContent = new Date().toLocaleString(undefined, {
@@ -195,6 +287,29 @@ async function removeAvatar() {
 }
 
 function attachEvents() {
+  document.addEventListener("click", handleHeaderAction);
+  document.addEventListener("click", (event) => {
+    if (!event.target.closest(".notification-wrap")) $("notification-popover").hidden = true;
+    if (!event.target.closest(".global-search")) $("search-results").hidden = true;
+  });
+  $("global-search").addEventListener("input", () => {
+    clearTimeout(searchTimer);
+    const term = $("global-search").value.trim();
+    searchTimer = setTimeout(() => searchRecords(term), 260);
+  });
+  $("global-search").addEventListener("focus", () => {
+    if ($("global-search").value.trim()) searchRecords($("global-search").value.trim());
+  });
+  $("global-search").addEventListener("keydown", (event) => {
+    if (event.key === "Escape") $("search-results").hidden = true;
+    if (event.key === "Enter") $("search-results").querySelector(".search-result")?.click();
+  });
+  document.addEventListener("keydown", (event) => {
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+      event.preventDefault();
+      $("global-search").focus();
+    }
+  });
   $("librarian-profile-form").addEventListener("submit", saveProfile);
   $("librarian-password-form").addEventListener("submit", updatePassword);
   $("avatar-file").addEventListener("change", (event) => uploadAvatar(event.currentTarget.files[0]));

@@ -111,6 +111,7 @@ function setIcons(root = document) {
 
 function setUserChrome() {
   document.body.classList.add(state.user.role === "librarian" ? "role-librarian" : "role-admin");
+  if (state.user.role === "librarian") document.documentElement.classList.add("librarian-scrollbars");
   if (state.user.role === "admin" && $("librarian-workbench")) $("librarian-workbench").hidden = true;
   const rawName = state.user.name || "Administrator";
   const name = state.user.role === "librarian"
@@ -153,11 +154,13 @@ function setUserChrome() {
     const kicker = document.querySelector(".welcome-kicker");
     const welcome = document.querySelector(".welcome-copy h2");
     const welcomeCopy = document.querySelector(".welcome-copy p");
+    const welcomeAvatar = $("welcome-avatar");
     if (heading) heading.textContent = "Daily operations";
     if (subtitle) subtitle.textContent = "Issue, return, and support the library desk.";
     if (kicker) kicker.textContent = "Librarian control desk";
     if (welcome) welcome.innerHTML = 'Welcome back, <span id="welcome-name">Librarian</span>!';
     if (welcomeCopy) welcomeCopy.textContent = "Keep circulation moving with live issues, returns, due dates, and member support.";
+    if (welcomeAvatar) welcomeAvatar.remove();
   } else {
     const kicker = document.querySelector(".welcome-kicker");
     if (kicker) kicker.textContent = "Administration command center";
@@ -238,6 +241,8 @@ function renderLibrarianWorkbench() {
   if (!workbench) return;
   workbench.hidden = false;
 
+  renderDeskStatus();
+  renderDueWatchlist();
   renderMemberResults("");
   const unpaidFines = state.fines.filter((fine) => fine.status === "unpaid").slice(0, 8);
   $("fine-workbench-count").textContent = state.fines.filter((fine) => fine.status === "unpaid").length;
@@ -249,6 +254,72 @@ function renderLibrarianWorkbench() {
     memberSearch.dataset.bound = "true";
     memberSearch.addEventListener("input", () => renderMemberResults(memberSearch.value));
   }
+}
+
+function renderDeskStatus() {
+  const copy = document.querySelector(".welcome-copy");
+  if (!copy) return;
+  let strip = $("librarian-desk-status");
+  if (!strip) {
+    strip = document.createElement("div");
+    strip.id = "librarian-desk-status";
+    strip.className = "librarian-desk-status";
+    strip.setAttribute("aria-label", "Live desk status");
+    const subtitle = copy.querySelector("p");
+    if (subtitle) subtitle.after(strip);
+    else copy.prepend(strip);
+  }
+  const totalCopies = state.books.reduce((sum, book) => sum + numeric(book.total_copies), 0);
+  const availableCopies = state.books.reduce((sum, book) => sum + numeric(book.available_copies), 0);
+  const issued = state.loans.filter((loan) => String(loan.status).toLowerCase() === "issued").length;
+  const overdue = state.loans.filter((loan) => String(loan.status).toLowerCase() === "overdue").length;
+  strip.innerHTML = [
+    ["Total Copies", totalCopies],
+    ["Available", availableCopies],
+    ["Issued", issued],
+    ["Overdue", overdue],
+  ].map(([label, value]) => `<span class="desk-status-pill"><strong>${numeric(value)}</strong> ${label}</span>`).join("");
+}
+
+function renderDueWatchlist() {
+  const workbench = $("librarian-workbench");
+  if (!workbench) return;
+  let watchlist = $("due-watchlist");
+  if (!watchlist) {
+    watchlist = document.createElement("div");
+    watchlist.id = "due-watchlist";
+    watchlist.className = "due-watchlist";
+    watchlist.setAttribute("role", "status");
+    const heading = workbench.querySelector(".workbench-heading");
+    if (heading) heading.after(watchlist);
+    else workbench.prepend(watchlist);
+  }
+  const active = state.loans.filter((loan) => ["issued", "overdue"].includes(String(loan.status).toLowerCase()));
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const dueSoon = active.filter((loan) => {
+    if (String(loan.status).toLowerCase() === "overdue") return false;
+    const due = dateOnly(loan.due_date);
+    if (!due) return false;
+    const daysUntil = Math.floor((due.getTime() - today.getTime()) / 86_400_000);
+    return daysUntil >= 0 && daysUntil <= 1;
+  });
+  const overdue = active.filter((loan) => String(loan.status).toLowerCase() === "overdue");
+  watchlist.classList.toggle("has-overdue", overdue.length > 0);
+  watchlist.classList.toggle("has-due-soon", !overdue.length && dueSoon.length > 0);
+  let message;
+  if (overdue.length) {
+    message = `${overdue.length} overdue ${overdue.length === 1 ? "loan needs" : "loans need"} follow-up.`;
+  } else if (dueSoon.length) {
+    const names = dueSoon.slice(0, 2).map((loan) => loan.book_title || "Untitled book").join(", ");
+    message = `${dueSoon.length} ${dueSoon.length === 1 ? "book is" : "books are"} due within 48 hours: ${esc(names)}${dueSoon.length > 2 ? ", …" : ""}`;
+  } else {
+    const nextDue = active.map((loan) => dateOnly(loan.due_date)).filter(Boolean).sort((a, b) => a - b)[0];
+    message = active.length
+      ? `All ${active.length} active loans are on schedule${nextDue ? ` — next due ${nextDue.toLocaleDateString(undefined, { month: "short", day: "numeric" })}` : ""}.`
+      : "No active loans to monitor.";
+  }
+  watchlist.innerHTML = `<span class="due-watchlist-copy"><span class="due-watchlist-indicator"></span><span>${message}</span></span><button class="due-watchlist-action" type="button" data-action="view-due-loans">View All Loans</button>`;
 }
 
 function renderMemberResults(term) {
@@ -445,7 +516,13 @@ function renderLoans() {
     const statusClass = String(loan.status || "").toLowerCase();
     const canReturn = ["issued", "overdue"].includes(statusClass);
     const hue = [...title].reduce((sum, char) => sum + char.charCodeAt(0) * 7, 0) % 360;
-    return `<tr><td title="${esc(title)}"><div class="book-cell"><span class="book-thumb" style="background:linear-gradient(145deg,hsl(${hue} 52% 43%),hsl(${(hue + 48) % 360} 45% 21%))">${esc(title.slice(0,1).toUpperCase())}</span><span class="book-copy"><strong title="${esc(title)}">${esc(title)}</strong><small>${esc(loan.book_author || "Author not recorded")}</small></span></div></td><td><span class="member-cell"><strong class="student-name" title="${esc(loan.student_name || loan.student_id)}">${esc(loan.student_name || loan.student_id || "Member")}</strong><small>${esc(loan.student_id || "")}</small></span></td><td>${dateLabel(loan.issue_date,{day:"numeric",month:"short",year:"2-digit"})}</td><td>${dateLabel(loan.due_date,{day:"numeric",month:"short",year:"2-digit"})}</td><td>${dateLabel(loan.return_date,{day:"numeric",month:"short",year:"2-digit"})}</td><td>${statusPill(statusClass)}</td><td>${canReturn ? `<button class="table-action" data-return-loan="${numeric(loan.id)}">Return</button>` : "—"}</td></tr>`;
+    const book = state.books.find((item) => Number(item.id) === Number(loan.book_id));
+    const coverUrl = book && (book.cover_url || book.coverUrl);
+    const safeCoverUrl = typeof coverUrl === "string" && (coverUrl.startsWith("https://") || coverUrl.startsWith("/uploads/book-covers/") || coverUrl.startsWith("/api/books/cover/")) ? coverUrl : "";
+    const cover = safeCoverUrl
+      ? `<img class="loan-cover-image" src="${esc(safeCoverUrl)}" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'loan-cover-fallback',textContent:'${esc(title.slice(0, 1).toUpperCase())}'}))">`
+      : `<span class="loan-cover-fallback">${esc(title.slice(0, 1).toUpperCase())}</span>`;
+    return `<tr><td title="${esc(title)}"><div class="book-cell"><span class="book-thumb loan-cover-thumb" style="background:linear-gradient(145deg,hsl(${hue} 52% 43%),hsl(${(hue + 48) % 360} 45% 21%))">${cover}</span><span class="book-copy"><strong title="${esc(title)}">${esc(title)}</strong><small>${esc(loan.book_author || "Author not recorded")}</small></span></div></td><td><span class="member-cell"><strong class="student-name" title="${esc(loan.student_name || loan.student_id)}">${esc(loan.student_name || loan.student_id || "Member")}</strong><small>${esc(loan.student_id || "")}</small></span></td><td>${dateLabel(loan.issue_date,{day:"numeric",month:"short",year:"2-digit"})}</td><td>${dateLabel(loan.due_date,{day:"numeric",month:"short",year:"2-digit"})}</td><td>${dateLabel(loan.return_date,{day:"numeric",month:"short",year:"2-digit"})}</td><td>${statusPill(statusClass)}</td><td>${canReturn ? `<button class="table-action" data-return-loan="${numeric(loan.id)}">Return</button>` : "—"}</td></tr>`;
   }).join("") : '<tr><td colspan="7" class="empty-cell">No loans match these filters.</td></tr>';
 }
 
@@ -1246,6 +1323,11 @@ function handleAction(event) {
     else if (action === "show-all-loans") {
       state.showAllLoans = !state.showAllLoans;
       renderLoans();
+    } else if (action === "view-due-loans") {
+      state.showAllLoans = true;
+      $("loan-status").value = "all";
+      renderLoans();
+      $("recent-loans").scrollIntoView({ behavior: "smooth" });
     } else if (action === "show-overdue") {
       $("loan-status").value = "overdue";
       state.showAllLoans = true;
@@ -1395,6 +1477,11 @@ async function init() {
     const loaded = await loadData();
     if (!loaded) return;
     renderDashboard();
+    const searchTerm = new URLSearchParams(location.search).get("search");
+    if (searchTerm) {
+      $("global-search").value = searchTerm;
+      searchRecords(searchTerm);
+    }
     const open = new URLSearchParams(location.search).get("open");
     if (open === "books") showCatalog();
     else if (open === "requests") showRequestsModal();
